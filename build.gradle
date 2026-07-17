@@ -49,6 +49,13 @@ repositories {
             includeGroup 'mezz.jei'
         }
     }
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
 }
 
 base {
@@ -135,6 +142,9 @@ configurations {
 
 dependencies {
     implementation "dev.latvian.mods:kubejs-neoforge:${kubejs_version}"
+    implementation "maven.modrinth:ldlib:mc26.1.x-${ldlib2_version}-neoforge"
+    // LDLib 内嵌了 Taffy，但其 Modrinth 元数据未将类型暴露给编译类路径。
+    compileOnly "dev.vfyjxf:taffy:1.1.4"
 
     // JEI API 仅参与编译，完整模组只加入开发运行环境。
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
