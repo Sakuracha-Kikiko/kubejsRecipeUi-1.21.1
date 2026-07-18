@@ -34,6 +34,9 @@ bin/
 
 ### Minecraft Modding ###
 run/
+/logs/
+/runclient.out
+/runclient.err
 !**/src/**/run/
 **/src/generated/**/.cache/
 repo/

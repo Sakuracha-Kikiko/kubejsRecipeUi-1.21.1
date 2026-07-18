@@ -12,6 +12,15 @@ public final class KubeJsRecipeGenerator {
     }
 
     public static String generate(RecipeDefinition recipe) {
+        return generate(recipe, RecipeWriteMode.ADD_ONLY, RecipeDeleteMode.OUTPUT, recipe.output().itemId());
+    }
+
+    public static String generate(
+            RecipeDefinition recipe,
+            RecipeWriteMode mode,
+            RecipeDeleteMode deleteMode,
+            String deleteValue
+    ) {
         var body = switch (recipe.type()) {
             case CRAFTING -> recipe.shaped() ? generateShaped(recipe) : generateShapeless(recipe);
             case FURNACE -> generateCooking("smelting", recipe);
@@ -20,7 +29,23 @@ public final class KubeJsRecipeGenerator {
             case STONECUTTER -> generateSingleInput("stonecutting", recipe);
             case SMITHING -> generateSmithing(recipe);
         };
+        if (mode == RecipeWriteMode.REMOVE_AND_ADD) {
+            body = generateRemoveBody(deleteMode, deleteValue) + "\n" + body;
+        }
         return "ServerEvents.recipes(event => {\n" + body + "\n});\n";
+    }
+
+    public static String generateRemove(RecipeDeleteMode deleteMode, String deleteValue) {
+        return "ServerEvents.recipes(event => {\n" + generateRemoveBody(deleteMode, deleteValue) + "\n});\n";
+    }
+
+    private static String generateRemoveBody(RecipeDeleteMode deleteMode, String deleteValue) {
+        var normalized = deleteValue == null ? "" : deleteValue.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("kubejs_recipe_ui.recipe_delete_mode.error.empty");
+        }
+        var key = deleteMode.name().toLowerCase(java.util.Locale.ROOT);
+        return "  event.remove({ " + key + ": " + quote(normalized) + " });";
     }
 
     private static String generateCooking(String method, RecipeDefinition recipe) {

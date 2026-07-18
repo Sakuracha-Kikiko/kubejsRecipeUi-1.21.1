@@ -3,6 +3,8 @@ package com.github.jun8848.kubejsrecipeui.client;
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.OutputSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDefinition;
+import com.github.jun8848.kubejsrecipeui.recipe.RecipeDeleteMode;
+import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.mojang.serialization.DynamicOps;
 import dev.latvian.mods.kubejs.core.ItemStackKJS;
@@ -26,6 +28,7 @@ public final class RecipeEditorSession {
     private WorkstationType activeType = WorkstationType.CRAFTING;
     private WorkstationType selectedType = WorkstationType.CRAFTING;
     private int selectedSlot;
+    private RecipeSourceInfo sourceInfo = RecipeSourceInfo.EMPTY;
 
     public RecipeEditorSession(Player player) {
         this.player = player;
@@ -126,6 +129,25 @@ public final class RecipeEditorSession {
         state.shaped = !state.shaped;
     }
 
+    public void setShaped(boolean shaped) {
+        state(WorkstationType.CRAFTING).shaped = shaped;
+    }
+
+    public RecipeSourceInfo getSourceInfo() {
+        return sourceInfo;
+    }
+
+    public void setSourceInfo(RecipeSourceInfo sourceInfo) {
+        this.sourceInfo = sourceInfo == null ? RecipeSourceInfo.EMPTY : sourceInfo;
+    }
+
+    public void setRecipeId(String recipeId) {
+        var normalized = recipeId == null ? "" : recipeId.trim();
+        var separator = normalized.indexOf(':');
+        var mod = separator > 0 ? normalized.substring(0, separator) : sourceInfo.mod();
+        sourceInfo = new RecipeSourceInfo(normalized, sourceInfo.type(), mod, sourceInfo.group());
+    }
+
     public float getExperience(WorkstationType type) {
         return state(type).experience;
     }
@@ -183,22 +205,63 @@ public final class RecipeEditorSession {
     }
 
     public RecipeDefinition createDefinition() {
+        return createDefinition(true, true);
+    }
+
+    public RecipeDefinition createDefinition(boolean includeInputComponents, boolean includeOutputComponents) {
         var state = state(activeType);
-        var outputStack = state.outputStack;
+        var output = createOutput(includeOutputComponents);
+        var inputs = Arrays.stream(state.inputSpecs)
+                .map(spec -> includeInputComponents ? spec : withoutComponents(spec))
+                .toList();
+        return new RecipeDefinition(
+                activeType,
+                state.shaped,
+                new ArrayList<>(inputs),
+                output,
+                state.experience,
+                state.cookingTime
+        );
+    }
+
+    public OutputSpec createOutput(boolean includeComponents) {
+        var outputStack = state(activeType).outputStack;
         if (outputStack.isEmpty()) {
             throw new IllegalArgumentException("请先设置输出物品");
         }
 
         var outputParts = splitItemExpression(outputStack);
-        var output = new OutputSpec(outputParts.itemId(), outputStack.getCount(), outputParts.componentPatch());
-        return new RecipeDefinition(
-                activeType,
-                state.shaped,
-                new ArrayList<>(Arrays.asList(state.inputSpecs)),
-                output,
-                state.experience,
-                state.cookingTime
+        return new OutputSpec(
+                outputParts.itemId(),
+                outputStack.getCount(),
+                includeComponents ? outputParts.componentPatch() : ""
         );
+    }
+
+    public String createDeleteValue(
+            RecipeDeleteMode deleteMode,
+            boolean includeInputComponents,
+            boolean includeOutputComponents
+    ) {
+        return switch (deleteMode) {
+            case ID -> sourceInfo.id();
+            case TYPE -> sourceInfo.type();
+            case MOD -> sourceInfo.mod();
+            case GROUP -> sourceInfo.group();
+            case INPUT -> {
+                var specification = Arrays.stream(state(activeType).inputSpecs)
+                        .filter(java.util.Objects::nonNull)
+                        .findFirst()
+                        .orElse(null);
+                yield ingredientExpression(includeInputComponents
+                        ? specification
+                        : withoutComponents(specification));
+            }
+            case OUTPUT -> {
+                var output = createOutput(includeOutputComponents);
+                yield output.itemId() + output.componentPatch();
+            }
+        };
     }
 
     private EditorState state(WorkstationType type) {
@@ -208,6 +271,35 @@ public final class RecipeEditorSession {
     private IngredientSpec ingredientFromStack(ItemStack stack) {
         var parts = splitItemExpression(stack);
         return IngredientSpec.item(parts.itemId(), parts.componentPatch());
+    }
+
+    private static IngredientSpec withoutComponents(IngredientSpec specification) {
+        if (specification == null) {
+            return null;
+        }
+        return switch (specification.kind()) {
+            case ITEM -> IngredientSpec.item(specification.value(), "");
+            case TAG -> specification;
+            case ALTERNATIVES -> IngredientSpec.alternatives(
+                    specification.alternatives().stream()
+                            .map(RecipeEditorSession::withoutComponents)
+                            .toList()
+            );
+        };
+    }
+
+    private static String ingredientExpression(IngredientSpec specification) {
+        if (specification == null) {
+            return "";
+        }
+        return switch (specification.kind()) {
+            case ITEM -> specification.value() + specification.componentPatch();
+            case TAG -> "#" + specification.value();
+            case ALTERNATIVES -> specification.alternatives().stream()
+                    .map(RecipeEditorSession::ingredientExpression)
+                    .findFirst()
+                    .orElse("");
+        };
     }
 
     private ItemExpression splitItemExpression(ItemStack stack) {
