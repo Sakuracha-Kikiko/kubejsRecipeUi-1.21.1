@@ -65,7 +65,7 @@ KubeJS recipe user interface extension.
     # Optional field describing why the dependency is required or why it is incompatible
     # reason="..."
     # The version range of the dependency
-    versionRange="[${neo_version},)" #mandatory
+    versionRange="[${neo_version_range},)" #mandatory
     # An ordering relationship for the dependency.
     # BEFORE - This mod is loaded BEFORE the dependency
     # AFTER - This mod is loaded AFTER the dependency
@@ -94,7 +94,7 @@ KubeJS recipe user interface extension.
     modId="jei"
     type="optional"
     reason="Enables recipe UI integration when JEI is installed."
-    versionRange="[29.16.0.47,)"
+    versionRange="[${jei_version_range},)"
     ordering="AFTER"
     side="CLIENT"
 
@@ -102,7 +102,7 @@ KubeJS recipe user interface extension.
     modId="ldlib2"
     type="required"
     reason="The recipe editor user interface is built with LDLib2."
-    versionRange="[26.1.2.29,)"
+    versionRange="[${ldlib2_version_range},)"
     ordering="AFTER"
     side="BOTH"
 
