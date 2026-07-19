@@ -20,6 +20,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -123,7 +124,9 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
             var shaped = recipe instanceof ShapedRecipe;
             var width = shaped ? ((ShapedRecipe) recipe).getWidth() : 0;
             var height = shaped ? ((ShapedRecipe) recipe).getHeight() : 0;
-            bridge.fill(workstationType, List.copyOf(inputs), output, sourceInfo, shaped, width, height);
+            var experience = recipe instanceof AbstractCookingRecipe cooking ? cooking.experience() : 0.0F;
+            var cookingTime = recipe instanceof AbstractCookingRecipe cooking ? cooking.cookingTime() : 200;
+            bridge.fill(workstationType, List.copyOf(inputs), output, sourceInfo, shaped, width, height, experience, cookingTime);
             return null;
         }
     }

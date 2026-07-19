@@ -266,11 +266,29 @@ public final class RecipeEditorUi {
                 sourceInfo,
                 shaped,
                 craftingWidth,
-                craftingHeight
+                craftingHeight,
+                experience,
+                cookingTime
         ) -> {
             session.setActiveType(type);
             session.setSourceInfo(sourceInfo);
             session.setShaped(shaped);
+            if (type.isCooking()) {
+                session.setExperience(type, experience);
+                session.setCookingTime(type, cookingTime);
+                var experienceElement = root.getModularUI() == null
+                        ? null
+                        : root.getModularUI().getElementById(cookingExperienceId(type));
+                if (experienceElement instanceof TextField field) {
+                    field.setText(Float.toString(experience));
+                }
+                var cookingTimeElement = root.getModularUI() == null
+                        ? null
+                        : root.getModularUI().getElementById(cookingTimeId(type));
+                if (cookingTimeElement instanceof TextField field) {
+                    field.setText(Integer.toString(cookingTime));
+                }
+            }
             for (var index = 0; index < type.inputCount(); index++) {
                 session.setInputStack(type, index, ItemStack.EMPTY);
             }
@@ -382,8 +400,10 @@ public final class RecipeEditorUi {
             WorkstationType type
     ) {
         var experience = numericField(Float.toString(session.getExperience(type)), 0.0F, 10000.0F, 48);
+        experience.setId(cookingExperienceId(type));
         experience.registerValueListener(value -> session.setExperience(type, parseFloat(value, 0.0F)));
         var cookingTime = numericField(Integer.toString(session.getCookingTime(type)), 1, 72000, 48);
+        cookingTime.setId(cookingTimeId(type));
         cookingTime.registerValueListener(value -> session.setCookingTime(type, parseInt(value, 200)));
 
         var panel = new UIElement();
@@ -599,6 +619,14 @@ public final class RecipeEditorUi {
 
     private static String outputSlotId(WorkstationType type) {
         return "kubejs_recipe_ui#output_" + type.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String cookingExperienceId(WorkstationType type) {
+        return "kubejs_recipe_ui#experience_" + type.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String cookingTimeId(WorkstationType type) {
+        return "kubejs_recipe_ui#cooking_time_" + type.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     private static Label symbol(String text) {

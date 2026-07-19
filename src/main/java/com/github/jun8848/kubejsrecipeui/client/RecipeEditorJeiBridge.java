@@ -24,9 +24,11 @@ public final class RecipeEditorJeiBridge extends UIElement {
             RecipeSourceInfo sourceInfo,
             boolean shaped,
             int craftingWidth,
-            int craftingHeight
+            int craftingHeight,
+            float experience,
+            int cookingTime
     ) {
-        transferConsumer.accept(type, inputs, output, sourceInfo, shaped, craftingWidth, craftingHeight);
+        transferConsumer.accept(type, inputs, output, sourceInfo, shaped, craftingWidth, craftingHeight, experience, cookingTime);
     }
 
     @FunctionalInterface
@@ -38,7 +40,9 @@ public final class RecipeEditorJeiBridge extends UIElement {
                 RecipeSourceInfo sourceInfo,
                 boolean shaped,
                 int craftingWidth,
-                int craftingHeight
+                int craftingHeight,
+                float experience,
+                int cookingTime
         );
     }
 }
