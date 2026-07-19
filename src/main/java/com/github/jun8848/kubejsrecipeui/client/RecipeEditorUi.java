@@ -54,6 +54,10 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 
+/**
+ * 使用 LDLib2 构建配方与事件编辑器的完整客户端界面。
+ * 该类只负责控件布局和交互，配方状态存放在 {@link RecipeEditorSession} 中。
+ */
 public final class RecipeEditorUi {
     private static final float SLOT_SIZE = 18.0F;
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -61,6 +65,9 @@ public final class RecipeEditorUi {
     private RecipeEditorUi() {
     }
 
+    /**
+     * 创建一个包含工作站侧边栏、配方编辑区、代码预览和事件编辑区的 ModularUI。
+     */
     public static ModularUI create(BlockUIMenuType.BlockUIHolder holder) {
         var session = new RecipeEditorSession(holder.player);
         var root = new UIElement();
@@ -97,6 +104,7 @@ public final class RecipeEditorUi {
         title.layout(style -> style.height(16));
         main.addChild(title);
 
+        // LDLib2 回调要求捕获变量保持有效 final 引用，因此用单元素数组保存可变选项。
         var writeMode = new RecipeWriteMode[]{RecipeWriteMode.ADD_ONLY};
         var writeModeButton = actionButton(Component.translatable(writeMode[0].translationKey()), 88);
         captureClick(writeModeButton, "切换配方写入方式", event -> {
@@ -112,6 +120,7 @@ public final class RecipeEditorUi {
         recipeOptions.addChildren(writeModeButton, inputComponents, outputComponents);
         main.addChild(recipeOptions);
 
+        // Selector 返回显示文本，通过映射恢复实际删除枚举。
         var deleteModeByDisplay = new HashMap<String, RecipeDeleteMode>();
         var deleteModeCandidates = Arrays.stream(RecipeDeleteMode.values()).map(mode -> {
             var display = translate(mode.translationKey());
@@ -166,6 +175,7 @@ public final class RecipeEditorUi {
         previewButton.addPreIcon(Icons.COPY);
         previewButton.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.tooltip.preview")));
 
+        // 预览框既展示生成结果，也允许玩家在写入前手动调整代码。
         var codePreview = new CodeEditor();
         codePreview.setLanguage(Languages.JAVASCRIPT);
         codePreview.setValue(new String[0], false);
@@ -183,6 +193,7 @@ public final class RecipeEditorUi {
         var writeButton = actionButton(Component.translatable("kubejs_recipe_ui.action.write"), 74);
         writeButton.addPreIcon(Icons.SAVE);
         writeButton.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.tooltip.write")));
+        // 文件系统只允许服务端访问；客户端按钮通过 RPC 请求服务端执行权限校验和写入。
         var writeRpc = writeButton.addRPCEvent(RPCEventBuilder.simple(
                 String.class,
                 String.class,
@@ -208,6 +219,7 @@ public final class RecipeEditorUi {
         var editorArea = new UIElement();
         editorArea.layout(style -> style.widthPercent(100).height(112));
         editorArea.lss("flex-direction", "column");
+        // 所有工作站面板只创建一次，侧边栏切换时仅改变可见性以保留控件状态。
         var panels = new EnumMap<WorkstationType, UIElement>(WorkstationType.class);
         for (var type : WorkstationType.values()) {
             var panel = createWorkstationPanel(root, holder, session, type);
@@ -259,6 +271,7 @@ public final class RecipeEditorUi {
             sidebar.addChild(button);
         }
 
+        // JEI 转移回调同时更新会话和已经挂载的槽位控件。
         var jeiBridge = new RecipeEditorJeiBridge((
                 type,
                 inputs,
@@ -293,6 +306,7 @@ public final class RecipeEditorUi {
                 session.setInputStack(type, index, ItemStack.EMPTY);
             }
 
+            // JEI 的小尺寸有序配方需要按原始宽高映射回固定的 3x3 编辑网格。
             if (type == WorkstationType.CRAFTING && shaped && inputs.size() != 9) {
                 for (var index = 0; index < inputs.size() && index < craftingWidth * craftingHeight; index++) {
                     var row = index / Math.max(1, craftingWidth);
@@ -362,6 +376,7 @@ public final class RecipeEditorUi {
         );
     }
 
+    /** 根据工作站类型分派到对应的原版风格面板构建器。 */
     private static UIElement createWorkstationPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -376,6 +391,7 @@ public final class RecipeEditorUi {
         };
     }
 
+    /** 创建 3x3 工作台输入网格和输出槽。 */
     private static UIElement createCraftingPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -393,6 +409,7 @@ public final class RecipeEditorUi {
         return panel;
     }
 
+    /** 创建熔炉类面板，包括输入、燃料预览、输出、经验和烹饪时间。 */
     private static UIElement createCookingPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -438,6 +455,7 @@ public final class RecipeEditorUi {
         return panel;
     }
 
+    /** 创建仅用于复刻原版布局的燃料幻影槽，燃料不参与配方代码。 */
     private static ItemSlot createFuelSlot(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -469,6 +487,7 @@ public final class RecipeEditorUi {
         return fuel;
     }
 
+    /** 创建切石机使用的单输入配方面板。 */
     private static UIElement createSingleInputPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -484,6 +503,7 @@ public final class RecipeEditorUi {
         return panel;
     }
 
+    /** 创建锻造台的模板、基础物品、追加材料和输出槽布局。 */
     private static UIElement createSmithingPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -503,6 +523,7 @@ public final class RecipeEditorUi {
         return panel;
     }
 
+    /** 创建水平排列且垂直居中的工作站槽位容器。 */
     private static UIElement workstationRow(float gap) {
         var panel = new UIElement();
         panel.layout(style -> style.widthPercent(100).height(62).gapAll(gap));
@@ -512,6 +533,10 @@ public final class RecipeEditorUi {
         return panel;
     }
 
+    /**
+     * 创建可接受玩家光标物品和 JEI 幻影填充的输入槽。
+     * 左键清空，右键打开原料类型与数据组件设置。
+     */
     private static ItemSlot createInputSlot(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -563,6 +588,7 @@ public final class RecipeEditorUi {
         return slot;
     }
 
+    /** 创建支持复制光标物品、清空和数量设置的输出幻影槽。 */
     private static ItemSlot createOutputSlot(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
@@ -606,6 +632,7 @@ public final class RecipeEditorUi {
         return output;
     }
 
+    /** 创建复用 LDLib2 原版风格纹理的配方箭头。 */
     private static UIElement recipeArrow() {
         var arrow = new UIElement();
         arrow.layout(style -> style.width(24).height(16));
@@ -613,22 +640,27 @@ public final class RecipeEditorUi {
         return arrow;
     }
 
+    /** 生成 JEI 回填时定位输入槽所需的稳定元素 ID。 */
     private static String inputSlotId(WorkstationType type, int slotIndex) {
         return "kubejs_recipe_ui#input_" + type.name().toLowerCase(java.util.Locale.ROOT) + "_" + slotIndex;
     }
 
+    /** 生成 JEI 回填时定位输出槽所需的稳定元素 ID。 */
     private static String outputSlotId(WorkstationType type) {
         return "kubejs_recipe_ui#output_" + type.name().toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** 生成 JEI 回填经验输入框所需的稳定元素 ID。 */
     private static String cookingExperienceId(WorkstationType type) {
         return "kubejs_recipe_ui#experience_" + type.name().toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** 生成 JEI 回填烹饪时间输入框所需的稳定元素 ID。 */
     private static String cookingTimeId(WorkstationType type) {
         return "kubejs_recipe_ui#cooking_time_" + type.name().toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** 创建紧凑的配方符号标签。 */
     private static Label symbol(String text) {
         var label = new Label();
         label.setText(text);
@@ -636,6 +668,7 @@ public final class RecipeEditorUi {
         return label;
     }
 
+    /** 将翻译标签和输入框组合成固定高度的一行。 */
     private static UIElement labeledField(String key, TextField field) {
         var row = new UIElement();
         row.layout(style -> style.widthPercent(100).height(20).gapAll(3));
@@ -647,6 +680,7 @@ public final class RecipeEditorUi {
         return row;
     }
 
+    /** 创建限制浮点范围的数字输入框。 */
     private static TextField numericField(String value, float min, float max, float width) {
         var field = new TextField();
         field.setNumbersOnlyFloat(min, max);
@@ -655,6 +689,7 @@ public final class RecipeEditorUi {
         return field;
     }
 
+    /** 创建限制整数范围的数字输入框。 */
     private static TextField numericField(String value, int min, int max, float width) {
         var field = new TextField();
         field.setNumbersOnlyInt(min, max);
@@ -663,6 +698,7 @@ public final class RecipeEditorUi {
         return field;
     }
 
+    /** 解析输入框浮点值，编辑中的临时非法文本使用回退值。 */
     private static float parseFloat(String value, float fallback) {
         try {
             return Float.parseFloat(value);
@@ -671,6 +707,7 @@ public final class RecipeEditorUi {
         }
     }
 
+    /** 解析输入框整数值，编辑中的临时非法文本使用回退值。 */
     private static int parseInt(String value, int fallback) {
         try {
             return Integer.parseInt(value);
@@ -679,6 +716,7 @@ public final class RecipeEditorUi {
         }
     }
 
+    /** 创建尺寸统一的文字操作按钮。 */
     private static Button actionButton(Component text, float width) {
         var button = new Button();
         button.setText(text);
@@ -686,6 +724,7 @@ public final class RecipeEditorUi {
         return button;
     }
 
+    /** 创建控制输入或输出数据组件是否参与生成的开关。 */
     private static Toggle componentToggle(String translationKey, boolean enabled, float width) {
         var toggle = new Toggle();
         toggle.toggleLabel.setText(Component.translatable(translationKey));
@@ -695,6 +734,9 @@ public final class RecipeEditorUi {
         return toggle;
     }
 
+    /**
+     * 在捕获阶段注册按钮点击，统一拦截事件并输出调试日志。
+     */
     private static void captureClick(
             Button button,
             String actionName,
@@ -708,6 +750,7 @@ public final class RecipeEditorUi {
         }, true);
     }
 
+    /** 打开当前输入槽的物品、标签、替代材料和数据组件设置弹窗。 */
     private static void showIngredientSettings(UIElement root, RecipeEditorSession session) {
         var selected = session.getInputSpec(session.getSelectedSlot());
         var modes = IngredientSpec.Kind.values();
@@ -797,6 +840,7 @@ public final class RecipeEditorUi {
         dialog.addButton(save).addButton(cancel).show(root);
     }
 
+    /** 根据原料模式切换普通文本框、标签选择器和数据组件控件的可见性。 */
     private static void updateIngredientValueControls(
             IngredientSpec.Kind mode,
             Label valueLabel,
@@ -811,6 +855,7 @@ public final class RecipeEditorUi {
         tagSelector.setDisplay(tagMode);
     }
 
+    /** 从标签下拉框读取当前选项，未选择时返回空字符串。 */
     private static String selectedTag(Selector<String> tagSelector) {
         var tag = tagSelector.getValue();
         if (tag == null || tag.isBlank()) {
@@ -819,6 +864,7 @@ public final class RecipeEditorUi {
         return tag;
     }
 
+    /** 创建固定高度的字段说明标签。 */
     private static Label fieldLabel(String translationKey, Object... arguments) {
         var label = new Label();
         label.setText(Component.translatable(translationKey, arguments));
@@ -826,6 +872,7 @@ public final class RecipeEditorUi {
         return label;
     }
 
+    /** 打开输出数量设置弹窗，并同步更新槽位和会话。 */
     private static void showOutputSettings(UIElement root, ItemSlot outputSlot, RecipeEditorSession session) {
         var countField = new TextField();
         countField.setNumbersOnlyInt(1, 99);
@@ -860,6 +907,7 @@ public final class RecipeEditorUi {
         dialog.addButton(save).addButton(cancel).show(root);
     }
 
+    /** @return 原料类型对应的本地化名称 */
     private static Component modeText(IngredientSpec.Kind kind) {
         return Component.translatable(switch (kind) {
             case ITEM -> "kubejs_recipe_ui.settings.mode_item";
@@ -868,6 +916,7 @@ public final class RecipeEditorUi {
         });
     }
 
+    /** 将原料模型还原为设置弹窗中的主值文本。 */
     private static String valueText(IngredientSpec specification) {
         if (specification == null) {
             return "";
@@ -882,12 +931,14 @@ public final class RecipeEditorUi {
         };
     }
 
+    /** 将替代材料列表转换为逗号分隔文本。 */
     private static String alternativeText(IngredientSpec specification) {
         return specification.kind() == IngredientSpec.Kind.TAG
                 ? "#" + specification.value()
                 : specification.value() + specification.componentPatch();
     }
 
+    /** 根据设置弹窗字段创建经过校验的原料模型。 */
     private static IngredientSpec createSpecification(IngredientSpec.Kind kind, String value, String components) {
         return switch (kind) {
             case ITEM -> IngredientSpec.item(value, components);
@@ -904,6 +955,7 @@ public final class RecipeEditorUi {
         };
     }
 
+    /** 创建与配方编辑器复用同一主窗口的 KubeJS 事件编辑面板。 */
     private static UIElement createEventEditorPanel(BlockUIMenuType.BlockUIHolder holder) {
         var main = new UIElement();
         main.layout(style -> style
@@ -1100,10 +1152,12 @@ public final class RecipeEditorUi {
         return main;
     }
 
+    /** 将代码编辑器的行数组合并为平台无关的换行文本。 */
     private static String editorCode(CodeEditor editor) {
         return String.join("\n", editor.getValue());
     }
 
+    /** 组合事件完整名称与中文翻译，供事件下拉框显示。 */
     private static String eventDisplay(EventDescriptor event) {
         var groupKey = "kubejs_recipe_ui.event.group." + event.group();
         var nameKey = "kubejs_recipe_ui.event.name." + event.name();
@@ -1119,6 +1173,7 @@ public final class RecipeEditorUi {
         ).getString();
     }
 
+    /** 组合事件方法翻译和签名，供方法下拉框区分重载。 */
     private static String eventMethodDisplay(EventMethodOption method) {
         if (method == EventMethodOption.NONE) {
             return translate("kubejs_recipe_ui.event.method.none");
@@ -1131,6 +1186,7 @@ public final class RecipeEditorUi {
         return method.displayText(translated);
     }
 
+    /** 翻译常见事件方法名称，缺少翻译时回退到可读英文。 */
     private static String translateMethodName(String name) {
         var translated = switch (name) {
             case "cancel" -> "取消事件";
@@ -1173,6 +1229,7 @@ public final class RecipeEditorUi {
         return humanizeEventName(name);
     }
 
+    /** 将 camelCase 或资源路径转换为便于阅读的标题文本。 */
     private static String humanizeEventName(String name) {
         var spaced = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2");
         if (spaced.isEmpty()) {
@@ -1181,6 +1238,7 @@ public final class RecipeEditorUi {
         return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
     }
 
+    /** 根据事件名称查找本模组语言文件中的翻译。 */
     private static String translateEventName(String name) {
         var words = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2").split("\\s+");
         var translated = new StringBuilder();
@@ -1293,6 +1351,7 @@ public final class RecipeEditorUi {
         return translated.isEmpty() ? humanizeEventName(name) : translated.toString();
     }
 
+    /** 创建滚动速度较慢的长文本标签，确保下拉选项可读。 */
     private static Label slowRollingLabel(String text) {
         var label = new Label();
         label.setText(text == null ? "" : text);
@@ -1306,6 +1365,7 @@ public final class RecipeEditorUi {
         return label;
     }
 
+    /** 按 ID 和翻译名称对事件目标候选项执行不区分大小写搜索。 */
     private static java.util.List<EventTargetOption> filterTargetCandidates(
             java.util.List<EventTargetOption> candidates,
             String query
@@ -1319,10 +1379,14 @@ public final class RecipeEditorUi {
                 .toList();
     }
 
+    /** @return 启动、服务端或客户端脚本端的本地化名称 */
     private static String scriptTypeText(ScriptType type) {
         return translate("kubejs_recipe_ui.event.script_type." + type.name().toLowerCase(java.util.Locale.ROOT));
     }
 
+    /**
+     * 从当前会话生成预览代码，并把校验错误转换为界面通知。
+     */
     private static void generateRecipe(
             RecipeEditorSession session,
             RecipeWriteMode writeMode,
@@ -1361,6 +1425,7 @@ public final class RecipeEditorUi {
         }
     }
 
+    /** 创建带标题和滚动内容区域的通用模态弹窗。 */
     private static Dialog createModal(String titleKey, float maxWidth, float maxHeight) {
         var dialog = new Dialog()
                 .setTitle(translate(titleKey))
@@ -1380,6 +1445,7 @@ public final class RecipeEditorUi {
         return dialog;
     }
 
+    /** 立即解析翻译键，用于 Selector 等只接受字符串的控件。 */
     private static String translate(String translationKey) {
         return Component.translatable(translationKey).getString();
     }

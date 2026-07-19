@@ -3,6 +3,7 @@ package com.github.jun8848.kubejsrecipeui.recipe;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
+/** 编辑器支持的原版工作站及其界面输入槽位配置。 */
 public enum WorkstationType {
     CRAFTING("kubejs_recipe_ui.workstation.crafting", Items.CRAFTING_TABLE, 9),
     FURNACE("kubejs_recipe_ui.workstation.furnace", Items.FURNACE, 1),
@@ -21,18 +22,22 @@ public enum WorkstationType {
         this.inputCount = inputCount;
     }
 
+    /** @return 工作站名称的翻译键 */
     public String translationKey() {
         return translationKey;
     }
 
+    /** @return 用于侧边栏按钮的原版物品图标 */
     public Item icon() {
         return icon;
     }
 
+    /** @return 该工作站配方所需的编辑器输入槽位数 */
     public int inputCount() {
         return inputCount;
     }
 
+    /** @return 当前类型是否需要经验和烹饪时间参数 */
     public boolean isCooking() {
         return this == FURNACE || this == SMOKER || this == BLAST_FURNACE;
     }

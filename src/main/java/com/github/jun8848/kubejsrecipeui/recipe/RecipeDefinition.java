@@ -5,6 +5,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * 从编辑器会话生成的完整配方快照，是代码生成器的唯一输入。
+ */
 public record RecipeDefinition(
         WorkstationType type,
         boolean shaped,
@@ -13,6 +16,7 @@ public record RecipeDefinition(
         float experience,
         int cookingTime
 ) {
+    /** 校验槽位数量、必需原料以及烹饪参数，阻止无效状态进入脚本生成阶段。 */
     public RecipeDefinition {
         type = Objects.requireNonNull(type, "type");
         Objects.requireNonNull(inputs, "inputs");

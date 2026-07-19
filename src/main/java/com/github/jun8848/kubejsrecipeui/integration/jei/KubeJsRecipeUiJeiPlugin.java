@@ -31,6 +31,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JEI 集成入口，为编辑器菜单注册原版配方类型的“转移配方”处理器。
+ */
 @JeiPlugin
 public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
     private static final Identifier UID = Identifier.fromNamespaceAndPath(KubeJsRecipeUi.MOD_ID, "recipe_transfer");
@@ -40,6 +43,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         return UID;
     }
 
+    /** 注册工作台、三种烹饪设备、切石机和锻造台的 JEI 转移处理器。 */
     @Override
     public void registerRecipeTransferHandlers(IRecipeTransferRegistration registration) {
         register(registration, RecipeTypes.CRAFTING, WorkstationType.CRAFTING);
@@ -61,6 +65,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         );
     }
 
+    /** 将 JEI 当前展示的 RecipeHolder 转换为编辑器可消费的数据。 */
     private record EditorTransferHandler<R extends Recipe<?>>(
             IRecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType,
@@ -99,6 +104,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
                 return null;
             }
 
+            // 优先读取 JEI 当前轮播展示的材料，否则使用槽位中的第一个候选项。
             var inputs = new ArrayList<ItemStack>();
             for (var slot : recipeSlots.getSlotViews(RecipeIngredientRole.INPUT)) {
                 inputs.add(slot.getDisplayedItemStack()
@@ -112,6 +118,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
                     .map(ItemStack::copy)
                     .orElse(ItemStack.EMPTY);
 
+            // 保留来源信息，使“按 ID/类型/模组/分组删除”无需玩家重复输入。
             var recipe = holder.value();
             var recipeId = holder.id().identifier();
             var recipeTypeId = BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer());
@@ -124,6 +131,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
             var shaped = recipe instanceof ShapedRecipe;
             var width = shaped ? ((ShapedRecipe) recipe).getWidth() : 0;
             var height = shaped ? ((ShapedRecipe) recipe).getHeight() : 0;
+            // 烹饪配方还需要同步 JEI 配方对象中的经验和时间，而不是沿用界面默认值。
             var experience = recipe instanceof AbstractCookingRecipe cooking ? cooking.experience() : 0.0F;
             var cookingTime = recipe instanceof AbstractCookingRecipe cooking ? cooking.cookingTime() : 200;
             bridge.fill(workstationType, List.copyOf(inputs), output, sourceInfo, shaped, width, height, experience, cookingTime);

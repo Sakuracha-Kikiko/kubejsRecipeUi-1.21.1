@@ -6,10 +6,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
+/** 负责将事件模板以 UTF-8 追加到对应脚本端的生成文件。 */
 public final class EventScriptStore {
+    /** 自动生成的事件脚本文件名。 */
     public static final String FILE_NAME = "generated_events.js";
     private static final int MAX_CODE_LENGTH = 65_536;
 
+    /**
+     * 追加一段事件代码，并在已有内容后保留两个换行以便阅读。
+     */
     public synchronized Path append(Path scriptsDirectory, String code) throws IOException {
         validate(code);
         Files.createDirectories(scriptsDirectory);

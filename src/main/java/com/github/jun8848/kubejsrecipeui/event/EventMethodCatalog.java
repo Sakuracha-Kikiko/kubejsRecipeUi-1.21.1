@@ -12,6 +12,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 通过反射读取事件对象可从 JavaScript 调用的方法，并生成方法下拉框数据。
+ */
 public final class EventMethodCatalog {
     private static final List<String> INTERNAL_METHODS = List.of(
             "afterPosted",
@@ -23,6 +26,9 @@ public final class EventMethodCatalog {
     private EventMethodCatalog() {
     }
 
+    /**
+     * 获取事件对象对脚本可见的方法，按名称和参数数量稳定排序并去除重复签名。
+     */
     public static List<EventMethodOption> candidates(EventDescriptor event) {
         var methods = new LinkedHashMap<String, EventMethodOption>();
         Arrays.stream(event.eventType().getMethods())
@@ -36,6 +42,7 @@ public final class EventMethodCatalog {
     }
 
     private static boolean isScriptMethod(Method method) {
+        // Rhino 上下文、桥接方法和标记为 HideFromJS 的 API 不应暴露给普通脚本用户。
         return Modifier.isPublic(method.getModifiers())
                 && !Modifier.isStatic(method.getModifiers())
                 && !method.isSynthetic()
@@ -47,6 +54,7 @@ public final class EventMethodCatalog {
     }
 
     private static EventMethodOption createOption(Method method) {
+        // Context 参数由 Rhino 注入，不应出现在玩家生成的调用代码中。
         var visibleParameters = Arrays.stream(method.getParameters())
                 .filter(parameter -> parameter.getType() != Context.class)
                 .toList();
@@ -80,6 +88,7 @@ public final class EventMethodCatalog {
         if (parameter.isNamePresent() && !parameter.getName().matches("arg\\d+")) {
             return parameter.getName();
         }
+        // 未保留编译参数名时，从 set/add/remove 等方法名推断一个可读名称。
         var stem = methodStem(method.getName());
         if (total == 1 && !stem.isBlank()) {
             return stem;
@@ -105,6 +114,7 @@ public final class EventMethodCatalog {
     }
 
     private static String placeholder(Class<?> type) {
+        // 占位值只保证生成的 JavaScript 结构可编辑，不代表业务上的最终参数。
         if (type == boolean.class || type == Boolean.class) {
             return "false";
         } else if (type == byte.class || type == short.class || type == int.class || type == long.class

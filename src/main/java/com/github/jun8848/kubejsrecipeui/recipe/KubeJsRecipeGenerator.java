@@ -7,14 +7,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * 将经过校验的配方模型转换为可直接执行的 KubeJS 服务端脚本。
+ */
 public final class KubeJsRecipeGenerator {
     private KubeJsRecipeGenerator() {
     }
 
+    /** 使用默认的“仅新增”策略生成配方代码。 */
     public static String generate(RecipeDefinition recipe) {
         return generate(recipe, RecipeWriteMode.ADD_ONLY, RecipeDeleteMode.OUTPUT, recipe.output().itemId());
     }
 
+    /**
+     * 根据工作站、写入策略和删除条件生成完整的配方事件块。
+     */
     public static String generate(
             RecipeDefinition recipe,
             RecipeWriteMode mode,
@@ -35,6 +42,7 @@ public final class KubeJsRecipeGenerator {
         return "ServerEvents.recipes(event => {\n" + body + "\n});\n";
     }
 
+    /** 仅生成包含一条删除语句的配方事件块。 */
     public static String generateRemove(RecipeDeleteMode deleteMode, String deleteValue) {
         return "ServerEvents.recipes(event => {\n" + generateRemoveBody(deleteMode, deleteValue) + "\n});\n";
     }
@@ -68,7 +76,9 @@ public final class KubeJsRecipeGenerator {
     }
 
     private static String generateShaped(RecipeDefinition recipe) {
+        // 先裁剪配方四周的空白槽位，使生成图案与原配方实际尺寸一致。
         var bounds = findBounds(recipe.inputs());
+        // LinkedHashMap 保证材料符号按照首次出现顺序稳定生成。
         var symbols = new LinkedHashMap<IngredientSpec, Character>();
         var rows = new ArrayList<String>();
 

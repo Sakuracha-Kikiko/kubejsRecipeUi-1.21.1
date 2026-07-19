@@ -14,10 +14,14 @@ import dev.latvian.mods.kubejs.script.data.GeneratedDataStage;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * 从 KubeJS 已注册事件组中动态构建事件列表，避免维护容易过期的硬编码清单。
+ */
 public final class KubeJsEventCatalog {
     private KubeJsEventCatalog() {
     }
 
+    /** @return 当前运行环境中全部可用事件，按完整事件名排序 */
     public static List<EventDescriptor> all() {
         return EventGroups.ALL.get().map().values().stream()
                 .flatMap(group -> group.getHandlers().values().stream())
@@ -35,6 +39,7 @@ public final class KubeJsEventCatalog {
     }
 
     private static EventTargetKind targetKind(String group, String name, EventTargetType<?> target) {
+        // 优先比较 KubeJS 暴露的目标类型单例，无法识别时保留为自定义目标。
         if (target == null) {
             return EventTargetKind.NONE;
         } else if (target == BlockEvents.TARGET) {

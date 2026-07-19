@@ -21,15 +21,21 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 
+/**
+ * 单次打开编辑器期间的状态容器，隔离 UI 控件、JEI 数据和代码生成模型。
+ * 每种工作站拥有独立状态，切换侧边栏不会丢失已经填写的内容。
+ */
 public final class RecipeEditorSession {
     private static final Logger LOGGER = LogUtils.getLogger();
     private final Player player;
+    /** 按工作站类型保存槽位、配方形状和烹饪参数。 */
     private final EnumMap<WorkstationType, EditorState> states = new EnumMap<>(WorkstationType.class);
     private WorkstationType activeType = WorkstationType.CRAFTING;
     private WorkstationType selectedType = WorkstationType.CRAFTING;
     private int selectedSlot;
     private RecipeSourceInfo sourceInfo = RecipeSourceInfo.EMPTY;
 
+    /** 为全部工作站预先创建固定尺寸的状态数组。 */
     public RecipeEditorSession(Player player) {
         this.player = player;
         for (var type : WorkstationType.values()) {
@@ -37,27 +43,35 @@ public final class RecipeEditorSession {
         }
     }
 
+    /** @return 当前在主界面中显示的工作站类型 */
     public WorkstationType getActiveType() {
         return activeType;
     }
 
+    /** 切换当前工作站，但保留其他工作站已经编辑的状态。 */
     public void setActiveType(WorkstationType activeType) {
         this.activeType = activeType;
         LOGGER.info("[工作台编辑器] 切换工作方块: {}", activeType);
     }
 
+    /** @return 当前工作站指定输入槽位的物品快照 */
     public ItemStack getInputStack(int index) {
         return getInputStack(activeType, index);
     }
 
+    /** @return 指定工作站和槽位的物品快照 */
     public ItemStack getInputStack(WorkstationType type, int index) {
         return state(type).inputStacks[index];
     }
 
+    /** 更新当前工作站的输入槽位。 */
     public void setInputStack(int index, ItemStack stack) {
         setInputStack(activeType, index, stack);
     }
 
+    /**
+     * 更新指定输入槽位，并同时重建默认的精确物品原料描述。
+     */
     public void setInputStack(WorkstationType type, int index, ItemStack stack) {
         var state = state(type);
         var normalized = normalizeInput(stack);
@@ -72,30 +86,37 @@ public final class RecipeEditorSession {
         );
     }
 
+    /** @return 当前工作站指定槽位的原料表达式 */
     public IngredientSpec getInputSpec(int index) {
         return getInputSpec(activeType, index);
     }
 
+    /** @return 指定工作站和槽位的原料表达式 */
     public IngredientSpec getInputSpec(WorkstationType type, int index) {
         return state(type).inputSpecs[index];
     }
 
+    /** 保存原料设置弹窗生成的物品、标签或替代材料描述。 */
     public void setInputSpec(int index, IngredientSpec spec) {
         state(selectedType).inputSpecs[index] = spec;
     }
 
+    /** @return 当前工作站输出槽的物品快照 */
     public ItemStack getOutputStack() {
         return getOutputStack(activeType);
     }
 
+    /** @return 指定工作站输出槽的物品快照 */
     public ItemStack getOutputStack(WorkstationType type) {
         return state(type).outputStack;
     }
 
+    /** 更新当前工作站输出槽。 */
     public void setOutputStack(ItemStack stack) {
         setOutputStack(activeType, stack);
     }
 
+    /** 复制外部 ItemStack，避免 JEI 或玩家容器后续修改同一个对象。 */
     public void setOutputStack(WorkstationType type, ItemStack stack) {
         var state = state(type);
         state.outputStack = stack == null || stack.isEmpty() ? ItemStack.EMPTY : stack.copy();
@@ -107,6 +128,7 @@ public final class RecipeEditorSession {
         );
     }
 
+    /** 修改当前输出物品数量，并执行界面允许范围校验。 */
     public void setOutputCount(int count) {
         var state = state(activeType);
         var outputStack = state.outputStack;
@@ -120,27 +142,33 @@ public final class RecipeEditorSession {
         LOGGER.info("[工作台编辑器] 输出数量更新: {}", count);
     }
 
+    /** @return 工作台配方是否为有序配方 */
     public boolean isShaped() {
         return state(WorkstationType.CRAFTING).shaped;
     }
 
+    /** 在有序和无序工作台配方之间切换。 */
     public void toggleShaped() {
         var state = state(WorkstationType.CRAFTING);
         state.shaped = !state.shaped;
     }
 
+    /** 由 JEI 转移结果直接设置工作台配方形状。 */
     public void setShaped(boolean shaped) {
         state(WorkstationType.CRAFTING).shaped = shaped;
     }
 
+    /** @return 最近一次 JEI 转移得到的配方来源信息 */
     public RecipeSourceInfo getSourceInfo() {
         return sourceInfo;
     }
 
+    /** 更新配方 ID、类型、来源模组和分组。 */
     public void setSourceInfo(RecipeSourceInfo sourceInfo) {
         this.sourceInfo = sourceInfo == null ? RecipeSourceInfo.EMPTY : sourceInfo;
     }
 
+    /** 修改玩家可编辑的配方 ID，并同步推导来源模组命名空间。 */
     public void setRecipeId(String recipeId) {
         var normalized = recipeId == null ? "" : recipeId.trim();
         var separator = normalized.indexOf(':');
@@ -148,30 +176,37 @@ public final class RecipeEditorSession {
         sourceInfo = new RecipeSourceInfo(normalized, sourceInfo.type(), mod, sourceInfo.group());
     }
 
+    /** @return 指定烹饪工作站的经验值 */
     public float getExperience(WorkstationType type) {
         return state(type).experience;
     }
 
+    /** 设置指定烹饪工作站的经验值。 */
     public void setExperience(WorkstationType type, float experience) {
         state(type).experience = experience;
     }
 
+    /** @return 指定烹饪工作站的烹饪时间，单位为 tick */
     public int getCookingTime(WorkstationType type) {
         return state(type).cookingTime;
     }
 
+    /** 设置指定烹饪工作站的烹饪时间。 */
     public void setCookingTime(WorkstationType type, int cookingTime) {
         state(type).cookingTime = cookingTime;
     }
 
+    /** @return 原料设置弹窗当前操作的槽位索引 */
     public int getSelectedSlot() {
         return selectedSlot;
     }
 
+    /** 选择当前工作站中的原料槽位。 */
     public void setSelectedSlot(int selectedSlot) {
         setSelectedSlot(activeType, selectedSlot);
     }
 
+    /** 选择指定工作站中的原料槽位，并检查索引是否有效。 */
     public void setSelectedSlot(WorkstationType type, int selectedSlot) {
         if (selectedSlot < 0 || selectedSlot >= state(type).inputStacks.length) {
             throw new IllegalArgumentException("选择的输入槽位无效");
@@ -180,10 +215,12 @@ public final class RecipeEditorSession {
         this.selectedSlot = selectedSlot;
     }
 
+    /** @return 当前选中物品由 KubeJS 序列化得到的数据组件补丁 */
     public String captureSelectedComponents() {
         return splitItemExpression(state(selectedType).inputStacks[selectedSlot]).componentPatch();
     }
 
+    /** @return 当前选中物品所属的全部物品标签，按 ID 排序 */
     public List<String> getSelectedItemTags() {
         var stack = state(selectedType).inputStacks[selectedSlot];
         if (stack.isEmpty()) {
@@ -204,10 +241,14 @@ public final class RecipeEditorSession {
         return tags;
     }
 
+    /** 使用当前的组件开关默认值创建配方快照。 */
     public RecipeDefinition createDefinition() {
         return createDefinition(true, true);
     }
 
+    /**
+     * 创建供代码生成器使用的不可变配方快照，并按开关移除输入或输出组件。
+     */
     public RecipeDefinition createDefinition(boolean includeInputComponents, boolean includeOutputComponents) {
         var state = state(activeType);
         var output = createOutput(includeOutputComponents);
@@ -224,6 +265,7 @@ public final class RecipeEditorSession {
         );
     }
 
+    /** 将当前输出槽转换为经过校验的输出模型。 */
     public OutputSpec createOutput(boolean includeComponents) {
         var outputStack = state(activeType).outputStack;
         if (outputStack.isEmpty()) {
@@ -238,6 +280,9 @@ public final class RecipeEditorSession {
         );
     }
 
+    /**
+     * 根据删除方式从 JEI 来源信息或当前槽位中提取 {@code event.remove} 的条件值。
+     */
     public String createDeleteValue(
             RecipeDeleteMode deleteMode,
             boolean includeInputComponents,
@@ -311,6 +356,7 @@ public final class RecipeEditorSession {
         single.setCount(1);
         @SuppressWarnings("unchecked")
         DynamicOps<Tag> ops = (DynamicOps<Tag>) player.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        // 复用 KubeJS 自身的物品字符串序列化，确保数据组件语法与 kubejs hand 一致。
         var expression = ((ItemStackKJS) (Object) single).kjs$toItemString0(ops);
         if (expression.length() >= 2 && expression.startsWith("'") && expression.endsWith("'")) {
             expression = expression.substring(1, expression.length() - 1);
@@ -341,6 +387,7 @@ public final class RecipeEditorSession {
     private record ItemExpression(String itemId, String componentPatch) {
     }
 
+    /** 单个工作站的可变编辑状态，仅由外层会话控制。 */
     private static final class EditorState {
         private final ItemStack[] inputStacks;
         private final IngredientSpec[] inputSpecs;

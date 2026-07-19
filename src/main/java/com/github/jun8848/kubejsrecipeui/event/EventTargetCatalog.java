@@ -13,10 +13,16 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * 根据事件目标类型读取 Minecraft 注册表，并生成带翻译名称的目标候选项。
+ */
 public final class EventTargetCatalog {
     private EventTargetCatalog() {
     }
 
+    /**
+     * 获取指定目标类型的可选 ID；无法枚举的自定义目标返回空列表供玩家手动输入。
+     */
     public static List<EventTargetOption> candidates(EventTargetKind kind, RegistryAccess registryAccess) {
         return switch (kind) {
             case BLOCK -> BuiltInRegistries.BLOCK.keySet().stream()
@@ -87,6 +93,7 @@ public final class EventTargetCatalog {
 
     private static EventTargetOption translatedOption(String id, String translationKey) {
         var translated = Component.translatable(translationKey).getString();
+        // 缺少语言条目时用资源路径转换出的可读文本兜底。
         return new EventTargetOption(id, translated.equals(translationKey) ? humanize(id) : translated);
     }
 

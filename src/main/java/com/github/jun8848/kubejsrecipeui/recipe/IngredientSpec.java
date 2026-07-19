@@ -4,9 +4,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+/**
+ * 描述单个配方原料，支持精确物品、物品标签和候选材料列表。
+ *
+ * @param kind 原料表达方式
+ * @param value 物品或标签资源 ID
+ * @param alternatives 替代材料列表
+ * @param componentPatch 精确物品携带的数据组件补丁
+ */
 public record IngredientSpec(Kind kind, String value, List<IngredientSpec> alternatives, String componentPatch) {
     private static final Pattern IDENTIFIER = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
 
+    /** 根据原料类型执行互斥字段校验，保证生成器接收到的状态始终合法。 */
     public IngredientSpec {
         kind = Objects.requireNonNull(kind, "kind");
         value = value == null ? "" : value.trim();
@@ -35,10 +44,12 @@ public record IngredientSpec(Kind kind, String value, List<IngredientSpec> alter
         }
     }
 
+    /** 创建一个精确物品原料。 */
     public static IngredientSpec item(String itemId, String componentPatch) {
         return new IngredientSpec(Kind.ITEM, itemId, List.of(), componentPatch);
     }
 
+    /** 创建物品标签原料，允许调用方传入带或不带 {@code #} 的标签。 */
     public static IngredientSpec tag(String tagId) {
         var normalized = tagId == null ? "" : tagId.trim();
         if (normalized.startsWith("#")) {
@@ -47,10 +58,16 @@ public record IngredientSpec(Kind kind, String value, List<IngredientSpec> alter
         return new IngredientSpec(Kind.TAG, normalized, List.of(), "");
     }
 
+    /** 创建由多个候选原料组成的替代材料。 */
     public static IngredientSpec alternatives(List<IngredientSpec> alternatives) {
         return new IngredientSpec(Kind.ALTERNATIVES, "", alternatives, "");
     }
 
+    /**
+     * 将界面中的单个候选表达式解析为物品或标签原料。
+     *
+     * @param text 物品、标签或带数据组件的物品表达式
+     */
     public static IngredientSpec parseAlternative(String text) {
         var normalized = Objects.requireNonNull(text, "text").trim();
         if (normalized.startsWith("#")) {
@@ -88,6 +105,7 @@ public record IngredientSpec(Kind kind, String value, List<IngredientSpec> alter
         return normalized;
     }
 
+    /** 原料在 KubeJS 代码中的三种表示方式。 */
     public enum Kind {
         ITEM,
         TAG,
