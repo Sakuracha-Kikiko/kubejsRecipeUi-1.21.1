@@ -72,6 +72,7 @@
   "kubejs_recipe_ui.event.target.recipe_viewer_entry.fluid": "Fluid",
   "kubejs_recipe_ui.event.action.regenerate": "Regenerate",
   "kubejs_recipe_ui.event.message.empty": "No KubeJS events are registered",
+  "kubejs_recipe_ui.event.message.preview_required": "The event preview is empty. Select an event and click Regenerate first",
   "kubejs_recipe_ui.event.message.write_success": "Event appended to generated_events.js for the selected script side",
   "kubejs_recipe_ui.event.message.write_failed": "Could not write the event script",
   "kubejs_recipe_ui.event.group.BlockEvents": "Block Events",

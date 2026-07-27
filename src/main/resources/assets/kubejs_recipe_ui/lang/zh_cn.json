@@ -72,6 +72,7 @@
   "kubejs_recipe_ui.event.target.recipe_viewer_entry.fluid": "流体",
   "kubejs_recipe_ui.event.action.regenerate": "重新生成",
   "kubejs_recipe_ui.event.message.empty": "当前环境没有注册 KubeJS 事件",
+  "kubejs_recipe_ui.event.message.preview_required": "事件预览为空，请先选择事件并点击重新生成",
   "kubejs_recipe_ui.event.message.write_success": "事件已追加到对应脚本端的 generated_events.js",
   "kubejs_recipe_ui.event.message.write_failed": "事件脚本写入失败",
   "kubejs_recipe_ui.event.group.BlockEvents": "方块事件",

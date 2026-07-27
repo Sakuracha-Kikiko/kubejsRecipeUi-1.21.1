@@ -208,7 +208,7 @@ public final class RecipeEditorUi {
                 return;
             }
             writeRpc.send(
-                    result -> Dialog.showNotification(translate((String) result), 2.5F),
+                    result -> showWriteResult(result, RecipeWriteService.FAILED),
                     code
             );
         });
@@ -1140,8 +1140,13 @@ public final class RecipeEditorUi {
                         : EventWriteService.FAILED
         ));
         captureClick(write, "写入事件脚本", event -> {
-            var payload = selectedType[0].name() + "\n" + editorCode(editor);
-            writeRpc.send(result -> Dialog.showNotification(translate((String) result), 2.5F), payload);
+            var code = editorCode(editor).trim();
+            if (code.isEmpty()) {
+                Dialog.showNotification(translate("kubejs_recipe_ui.event.message.preview_required"), 3.0F);
+                return;
+            }
+            var payload = selectedType[0].name() + "\n" + code;
+            writeRpc.send(result -> showWriteResult(result, EventWriteService.FAILED), payload);
         });
         actions.addChildren(regenerate, copy, write);
 
@@ -1382,6 +1387,13 @@ public final class RecipeEditorUi {
     /** @return 启动、服务端或客户端脚本端的本地化名称 */
     private static String scriptTypeText(ScriptType type) {
         return translate("kubejs_recipe_ui.event.script_type." + type.name().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** 显示服务端返回的写入结果，成功和失败都会给玩家明确反馈。 */
+    private static void showWriteResult(Object result, String fallbackKey) {
+        var translationKey = result instanceof String value && !value.isBlank() ? value : fallbackKey;
+        Dialog.showNotification(translate(translationKey), 3.0F);
+        LOGGER.info("[工作台编辑器] 脚本写入结果: {}", translationKey);
     }
 
     /**
