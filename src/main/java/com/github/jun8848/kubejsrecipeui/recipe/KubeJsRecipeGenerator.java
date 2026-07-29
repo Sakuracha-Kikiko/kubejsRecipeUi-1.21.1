@@ -14,11 +14,6 @@ public final class KubeJsRecipeGenerator {
     private KubeJsRecipeGenerator() {
     }
 
-    /** 使用默认的“仅新增”策略生成配方代码。 */
-    public static String generate(RecipeDefinition recipe) {
-        return generate(recipe, RecipeWriteMode.ADD_ONLY, RecipeDeleteMode.OUTPUT, recipe.output().itemId());
-    }
-
     /**
      * 根据工作站、写入策略和删除条件生成完整的配方事件块。
      */
@@ -33,6 +28,7 @@ public final class KubeJsRecipeGenerator {
             case FURNACE -> generateCooking("smelting", recipe);
             case SMOKER -> generateCooking("smoking", recipe);
             case BLAST_FURNACE -> generateCooking("blasting", recipe);
+            case CAMPFIRE -> generateCooking("campfireCooking", recipe);
             case STONECUTTER -> generateSingleInput("stonecutting", recipe);
             case SMITHING -> generateSmithing(recipe);
         };
@@ -60,19 +56,22 @@ public final class KubeJsRecipeGenerator {
         return "  event." + method + "(" + outputExpression(recipe.output()) + ", "
                 + ingredientExpression(recipe.inputs().getFirst()) + ")"
                 + ".xp(" + number(recipe.experience()) + ")"
-                + ".cookingTime(" + recipe.cookingTime() + ");";
+                + ".cookingTime(" + recipe.cookingTime() + ")"
+                + idExpression(recipe) + ";";
     }
 
     private static String generateSingleInput(String method, RecipeDefinition recipe) {
         return "  event." + method + "(" + outputExpression(recipe.output()) + ", "
-                + ingredientExpression(recipe.inputs().getFirst()) + ");";
+                + ingredientExpression(recipe.inputs().getFirst()) + ")"
+                + idExpression(recipe) + ";";
     }
 
     private static String generateSmithing(RecipeDefinition recipe) {
         return "  event.smithing(" + outputExpression(recipe.output()) + ", "
                 + ingredientExpression(recipe.inputs().get(0)) + ", "
                 + ingredientExpression(recipe.inputs().get(1)) + ", "
-                + ingredientExpression(recipe.inputs().get(2)) + ");";
+                + ingredientExpression(recipe.inputs().get(2)) + ")"
+                + idExpression(recipe) + ";";
     }
 
     private static String generateShaped(RecipeDefinition recipe) {
@@ -111,7 +110,7 @@ public final class KubeJsRecipeGenerator {
                     .append(ingredientExpression(entry.getKey()));
             builder.append(index + 1 == entries.size() ? "\n" : ",\n");
         }
-        builder.append("  });");
+        builder.append("  })").append(idExpression(recipe)).append(";");
         return builder.toString();
     }
 
@@ -122,7 +121,7 @@ public final class KubeJsRecipeGenerator {
                 .collect(Collectors.joining(",\n    "));
         return "  event.shapeless(" + outputExpression(recipe.output()) + ", [\n"
                 + "    " + ingredients + "\n"
-                + "  ]);";
+                + "  ])" + idExpression(recipe) + ";";
     }
 
     private static Bounds findBounds(List<IngredientSpec> inputs) {
@@ -157,6 +156,11 @@ public final class KubeJsRecipeGenerator {
     private static String outputExpression(OutputSpec output) {
         var prefix = output.count() == 1 ? "" : output.count() + "x ";
         return quote(prefix + output.itemId() + output.componentPatch());
+    }
+
+    /** @return 追加到 KubeJS 配方构建器末尾的显式配方 ID。 */
+    private static String idExpression(RecipeDefinition recipe) {
+        return ".id(" + quote(recipe.id()) + ")";
     }
 
     private static String quote(String value) {

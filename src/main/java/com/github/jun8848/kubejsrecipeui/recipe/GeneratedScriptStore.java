@@ -25,8 +25,8 @@ public final class GeneratedScriptStore {
     public synchronized Path append(Path serverScriptsDirectory, String code) throws IOException {
         validate(code);
         Files.createDirectories(serverScriptsDirectory);
-        var target = serverScriptsDirectory.resolve(FILE_NAME);
         var generated = code.strip();
+        var target = serverScriptsDirectory.resolve(FILE_NAME);
         var content = Files.exists(target)
                 ? mergeWithExisting(Files.readString(target, StandardCharsets.UTF_8), generated)
                 : generated + System.lineSeparator();
@@ -80,11 +80,15 @@ public final class GeneratedScriptStore {
         }
 
         var normalized = code.strip();
-        if (!normalized.startsWith("ServerEvents.recipes(event => {") || !normalized.endsWith("});")) {
+        if (!isRecipeScript(normalized)) {
             throw new IllegalArgumentException("生成的配方代码格式无效");
         }
         if (normalized.indexOf('\0') >= 0) {
             throw new IllegalArgumentException("生成的配方代码包含无效字符");
         }
+    }
+
+    private static boolean isRecipeScript(String code) {
+        return code.startsWith("ServerEvents.recipes(event => {") && code.endsWith("});");
     }
 }

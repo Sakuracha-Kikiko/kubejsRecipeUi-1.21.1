@@ -21,7 +21,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
-import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
@@ -43,13 +42,14 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         return UID;
     }
 
-    /** 注册工作台、三种烹饪设备、切石机和锻造台的 JEI 转移处理器。 */
+    /** 注册工作台、四种烹饪设备、切石机和锻造台的 JEI 转移处理器。 */
     @Override
     public void registerRecipeTransferHandlers(IRecipeTransferRegistration registration) {
         register(registration, RecipeTypes.CRAFTING, WorkstationType.CRAFTING);
         register(registration, RecipeTypes.SMELTING, WorkstationType.FURNACE);
         register(registration, RecipeTypes.SMOKING, WorkstationType.SMOKER);
         register(registration, RecipeTypes.BLASTING, WorkstationType.BLAST_FURNACE);
+        register(registration, RecipeTypes.CAMPFIRE_COOKING, WorkstationType.CAMPFIRE);
         register(registration, RecipeTypes.STONECUTTING, WorkstationType.STONECUTTER);
         register(registration, RecipeTypes.SMITHING, WorkstationType.SMITHING);
     }

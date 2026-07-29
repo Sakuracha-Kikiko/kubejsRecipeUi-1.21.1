@@ -1,22 +1,13 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
-import com.github.jun8848.kubejsrecipeui.event.EventDescriptor;
-import com.github.jun8848.kubejsrecipeui.event.EventMethodCatalog;
-import com.github.jun8848.kubejsrecipeui.event.EventMethodOption;
-import com.github.jun8848.kubejsrecipeui.event.EventScriptGenerator;
-import com.github.jun8848.kubejsrecipeui.event.EventTargetCatalog;
-import com.github.jun8848.kubejsrecipeui.event.EventTargetOption;
-import com.github.jun8848.kubejsrecipeui.event.EventWriteService;
-import com.github.jun8848.kubejsrecipeui.event.KubeJsEventCatalog;
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.KubeJsRecipeGenerator;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDeleteMode;
-import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
+import com.github.jun8848.kubejsrecipeui.recipe.RecipeDefinition;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeWriteService;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeWriteMode;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.lowdragmc.lowdraglib2.LDLib2;
-import com.lowdragmc.lowdraglib2.editor.ClipboardManager;
 import com.lowdragmc.lowdraglib2.gui.factory.BlockUIMenuType;
 import com.lowdragmc.lowdraglib2.gui.sync.bindings.impl.DataBindingBuilder;
 import com.lowdragmc.lowdraglib2.gui.sync.rpc.RPCEventBuilder;
@@ -32,20 +23,24 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.ItemSlot;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Selector;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.SplitView;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Switch;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Tab;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.TabView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
-import com.lowdragmc.lowdraglib2.gui.ui.elements.Toggle;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.CodeEditor;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.language.Languages;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.inventory.InventorySlots;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.style.StylesheetManager;
-import dev.latvian.mods.kubejs.script.ScriptType;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
@@ -55,35 +50,60 @@ import java.util.EnumMap;
 import java.util.HashMap;
 
 /**
- * 使用 LDLib2 构建配方与事件编辑器的完整客户端界面。
+ * 使用 LDLib2 构建配方编辑器的完整客户端界面。
  * 该类只负责控件布局和交互，配方状态存放在 {@link RecipeEditorSession} 中。
  */
 public final class RecipeEditorUi {
     private static final float SLOT_SIZE = 18.0F;
+    private static final Identifier MINECRAFT_FONT = Identifier.withDefaultNamespace("default");
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private RecipeEditorUi() {
     }
 
     /**
-     * 创建一个包含工作站侧边栏、配方编辑区、代码预览和事件编辑区的 ModularUI。
+     * 创建一个包含工作站侧边栏、配方编辑区和代码预览的 ModularUI。
      */
     public static ModularUI create(BlockUIMenuType.BlockUIHolder holder) {
         var session = new RecipeEditorSession(holder.player);
         var root = new UIElement();
         root.layout(style -> style
-                .width(290)
-                .height(445)
+                .width(560)
+                .height(420)
                 .gapAll(4)
         );
-        root.lss("flex-direction", "row");
+        root.lss("flex-direction", "column");
+
+        var header = new UIElement();
+        header.layout(style -> style
+                .widthPercent(100)
+                .height(26)
+                .paddingHorizontal(8)
+        );
+        header.lss("flex-direction", "row");
+        header.lss("align-items", "center");
+        header.addClass("panel_bg");
+
+        var title = new Label();
+        title.setText(Component.translatable(WorkstationType.CRAFTING.translationKey()));
+        title.textStyle(style -> style.textAlignHorizontal(Horizontal.CENTER));
+        title.layout(style -> style.widthPercent(100).height(16));
+        header.addChild(title);
+
+        var contentBody = new UIElement();
+        contentBody.layout(style -> style
+                .widthPercent(100)
+                .flex(1)
+                .gapAll(4)
+        );
+        contentBody.lss("flex-direction", "row");
 
         var sidebar = new UIElement();
         sidebar.layout(style -> style
-                .width(28)
+                .width(36)
                 .heightPercent(100)
-                .paddingAll(4)
-                .gapAll(4)
+                .paddingAll(6)
+                .gapAll(5)
         );
         sidebar.lss("flex-direction", "column");
         sidebar.lss("align-items", "center");
@@ -91,34 +111,55 @@ public final class RecipeEditorUi {
 
         var main = new UIElement();
         main.layout(style -> style
-                .width(258)
-                .height(445)
-                .paddingAll(9)
-                .gapAll(5)
+                .flex(1)
+                .heightPercent(100)
         );
         main.lss("flex-direction", "column");
         main.addClass("panel_bg");
 
-        var title = new Label();
-        title.setText(Component.translatable(WorkstationType.CRAFTING.translationKey()));
-        title.layout(style -> style.height(16));
-        main.addChild(title);
+        var recipeCanvas = new UIElement();
+        recipeCanvas.layout(style -> style
+                .widthPercent(100)
+                .heightPercent(100)
+                .paddingAll(8)
+                .gapAll(5)
+        );
+        recipeCanvas.lss("flex-direction", "column");
+        recipeCanvas.addClass("panel_bg");
+
+        var inspectorContent = new UIElement();
+        inspectorContent.layout(style -> style
+                .widthPercent(100)
+                .paddingAll(7)
+                .gapAll(5)
+        );
+        inspectorContent.lss("flex-direction", "column");
+
+        var inspector = new ScrollerView();
+        inspector.layout(style -> style.widthPercent(100).heightPercent(100));
+        inspector.viewContainer(element -> {
+            element.layout(style -> style.widthPercent(100));
+            element.lss("flex-direction", "column");
+        });
+        inspector.addScrollViewChild(inspectorContent);
 
         // LDLib2 回调要求捕获变量保持有效 final 引用，因此用单元素数组保存可变选项。
         var writeMode = new RecipeWriteMode[]{RecipeWriteMode.ADD_ONLY};
         var writeModeButton = actionButton(Component.translatable(writeMode[0].translationKey()), 88);
+        writeModeButton.layout(style -> style.widthPercent(100).height(20));
         captureClick(writeModeButton, "切换配方写入方式", event -> {
             writeMode[0] = writeMode[0].next();
             writeModeButton.setText(Component.translatable(writeMode[0].translationKey()));
         });
 
-        var inputComponents = componentToggle("kubejs_recipe_ui.recipe_components.input", true, 72);
-        var outputComponents = componentToggle("kubejs_recipe_ui.recipe_components.output", true, 72);
-        var recipeOptions = new UIElement();
-        recipeOptions.layout(style -> style.widthPercent(100).height(20).gapAll(4));
-        recipeOptions.lss("flex-direction", "row");
-        recipeOptions.addChildren(writeModeButton, inputComponents, outputComponents);
-        main.addChild(recipeOptions);
+        var inputComponents = componentSwitch("kubejs_recipe_ui.recipe_components.input", true);
+        var outputComponents = componentSwitch("kubejs_recipe_ui.recipe_components.output", true);
+        inspectorContent.addChildren(
+                editorSectionLabel("kubejs_recipe_ui.editor.inspector.recipe"),
+                writeModeButton,
+                switchOptionRow("kubejs_recipe_ui.recipe_components.input", inputComponents),
+                switchOptionRow("kubejs_recipe_ui.recipe_components.output", outputComponents)
+        );
 
         // Selector 返回显示文本，通过映射恢复实际删除枚举。
         var deleteModeByDisplay = new HashMap<String, RecipeDeleteMode>();
@@ -133,7 +174,7 @@ public final class RecipeEditorUi {
         deleteModeSelector.setCandidates(deleteModeCandidates)
                 .setSelected(translate(RecipeDeleteMode.ID.translationKey()));
         deleteModeSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
-        deleteModeSelector.layout(style -> style.width(92).height(20));
+        deleteModeSelector.layout(style -> style.widthPercent(100).height(20));
         deleteModeSelector.setOnValueChanged(value -> {
             var selected = deleteModeByDisplay.get(value);
             if (selected != null) {
@@ -141,28 +182,39 @@ public final class RecipeEditorUi {
             }
         });
 
+        // 来源标签页会在 JEI 填充时同步刷新，空值用短横线保持版面稳定。
+        var sourceIdValue = sourceValueLabel();
+        var sourceTypeValue = sourceValueLabel();
+        var sourceModValue = sourceValueLabel();
+        var sourceGroupValue = sourceValueLabel();
+
         var recipeIdField = new TextField();
         recipeIdField.setAnyString();
-        recipeIdField.layout(style -> style.flex(1).height(20));
+        recipeIdField.layout(style -> style.widthPercent(100).height(20));
         recipeIdField.textFieldStyle(style -> style.placeholder(
                 Component.translatable("kubejs_recipe_ui.jei.recipe_id.placeholder")
         ));
-        recipeIdField.registerValueListener(session::setRecipeId);
-        var deleteOptions = new UIElement();
-        deleteOptions.layout(style -> style.widthPercent(100).height(20).gapAll(4));
-        deleteOptions.lss("flex-direction", "row");
-        deleteOptions.addChildren(deleteModeSelector, recipeIdField);
-        main.addChild(deleteOptions);
+        recipeIdField.registerValueListener(value -> {
+            session.setRecipeId(value);
+            sourceIdValue.setText(Component.literal(sourceDisplayValue(value)));
+        });
+        inspectorContent.addChildren(
+                editorSectionLabel("kubejs_recipe_ui.editor.inspector.delete"),
+                fieldLabel("kubejs_recipe_ui.recipe.id"),
+                recipeIdField,
+                deleteModeSelector
+        );
 
         var actions = new UIElement();
         actions.layout(style -> style
-                .height(22)
+                .height(46)
                 .widthPercent(100)
                 .gapAll(4)
         );
-        actions.lss("flex-direction", "row");
+        actions.lss("flex-direction", "column");
 
         var modeButton = actionButton(Component.translatable("kubejs_recipe_ui.action.shaped"), 74);
+        modeButton.layout(style -> style.widthPercent(100).height(20));
         modeButton.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.tooltip.mode")));
         captureClick(modeButton, "切换有序/无序", event -> {
             session.toggleShaped();
@@ -178,8 +230,9 @@ public final class RecipeEditorUi {
         // 预览框既展示生成结果，也允许玩家在写入前手动调整代码。
         var codePreview = new CodeEditor();
         codePreview.setLanguage(Languages.JAVASCRIPT);
+        codePreview.textAreaStyle(style -> style.font(MINECRAFT_FONT));
         codePreview.setValue(new String[0], false);
-        codePreview.layout(style -> style.widthPercent(100).height(82));
+        codePreview.layout(style -> style.widthPercent(100).heightPercent(100));
 
         captureClick(previewButton, "生成代码预览", event -> generateRecipe(
                 session,
@@ -204,17 +257,26 @@ public final class RecipeEditorUi {
         captureClick(writeButton, "写入预览代码", event -> {
             var code = editorCode(codePreview).trim();
             if (code.isEmpty()) {
-                Dialog.showNotification(translate("kubejs_recipe_ui.message.preview_required"), 3.0F);
+                showInGameMessage(holder.player, "kubejs_recipe_ui.message.preview_required");
                 return;
             }
             writeRpc.send(
-                    result -> showWriteResult(result, RecipeWriteService.FAILED),
+                    result -> showWriteResult(holder.player, result, RecipeWriteService.FAILED),
                     code
             );
         });
 
-        actions.addChildren(modeButton, previewButton, writeButton);
-        main.addChild(actions);
+        var generateActions = new UIElement();
+        generateActions.layout(style -> style.widthPercent(100).height(22).gapAll(4));
+        generateActions.lss("flex-direction", "row");
+        previewButton.layout(style -> style.flex(1).height(20));
+        writeButton.layout(style -> style.flex(1).height(20));
+        generateActions.addChildren(previewButton, writeButton);
+        actions.addChildren(modeButton, generateActions);
+        inspectorContent.addChildren(
+                editorSectionLabel("kubejs_recipe_ui.editor.inspector.actions"),
+                actions
+        );
 
         var editorArea = new UIElement();
         editorArea.layout(style -> style.widthPercent(100).height(112));
@@ -227,25 +289,55 @@ public final class RecipeEditorUi {
             panels.put(type, panel);
             editorArea.addChild(panel);
         }
-        main.addChild(editorArea);
-
-        var previewLabel = new Label();
-        previewLabel.setText(Component.translatable("kubejs_recipe_ui.preview.inline_title"));
-        previewLabel.layout(style -> style.height(11));
-        main.addChildren(previewLabel, codePreview);
+        recipeCanvas.addChild(editorArea);
 
         var inventoryLabel = new Label();
         inventoryLabel.setText(Component.translatable("container.inventory"));
         inventoryLabel.layout(style -> style.height(11).marginTop(1));
-        main.addChild(inventoryLabel);
+        recipeCanvas.addChild(inventoryLabel);
 
         var inventorySlots = new InventorySlots();
         inventorySlots.layout(style -> style.marginHorizontalAuto());
-        main.addChild(inventorySlots);
+        recipeCanvas.addChild(inventorySlots);
 
-        var eventMain = createEventEditorPanel(holder);
-        eventMain.setDisplay(false);
-        var eventButtonReference = new Button[1];
+        var sourceContent = new UIElement();
+        sourceContent.layout(style -> style
+                .widthPercent(100)
+                .heightPercent(100)
+                .paddingAll(6)
+                .gapAll(3)
+        );
+        sourceContent.lss("flex-direction", "column");
+        sourceContent.addChildren(
+                sourceInfoRow("kubejs_recipe_ui.editor.source.id", sourceIdValue),
+                sourceInfoRow("kubejs_recipe_ui.editor.source.type", sourceTypeValue),
+                sourceInfoRow("kubejs_recipe_ui.editor.source.mod", sourceModValue),
+                sourceInfoRow("kubejs_recipe_ui.editor.source.group", sourceGroupValue)
+        );
+
+        var codeContent = new UIElement();
+        codeContent.layout(style -> style.widthPercent(100).heightPercent(100).paddingAll(4));
+        codeContent.addChild(codePreview);
+
+        var bottomTabs = new TabView();
+        bottomTabs.layout(style -> style.widthPercent(100).heightPercent(100));
+        bottomTabs.addTab(
+                new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.tab.code")),
+                codeContent
+        );
+        bottomTabs.addTab(
+                new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.tab.source")),
+                sourceContent
+        );
+
+        var workspaceSplit = new SplitView.Horizontal();
+        workspaceSplit.setPercentage(66).left(recipeCanvas).right(inspector);
+        workspaceSplit.layout(style -> style.widthPercent(100).heightPercent(100));
+
+        var editorSplit = new SplitView.Vertical();
+        editorSplit.setPercentage(68).top(workspaceSplit).bottom(bottomTabs);
+        editorSplit.layout(style -> style.widthPercent(100).heightPercent(100));
+        main.addChild(editorSplit);
 
         var workstationButtons = new EnumMap<WorkstationType, Button>(WorkstationType.class);
         for (var type : WorkstationType.values()) {
@@ -257,10 +349,6 @@ public final class RecipeEditorUi {
             button.setActive(type != WorkstationType.CRAFTING);
             captureClick(button, "切换工作方块: " + type, event -> {
                 main.setDisplay(true);
-                eventMain.setDisplay(false);
-                if (eventButtonReference[0] != null) {
-                    eventButtonReference[0].setActive(true);
-                }
                 session.setActiveType(type);
                 title.setText(Component.translatable(type.translationKey()));
                 panels.forEach((panelType, panel) -> panel.setDisplay(panelType == type));
@@ -337,11 +425,11 @@ public final class RecipeEditorUi {
                 outputSlot.setItem(output);
             }
             recipeIdField.setText(sourceInfo.id());
+            sourceIdValue.setText(Component.literal(sourceDisplayValue(sourceInfo.id())));
+            sourceTypeValue.setText(Component.literal(sourceDisplayValue(sourceInfo.type())));
+            sourceModValue.setText(Component.literal(sourceDisplayValue(sourceInfo.mod())));
+            sourceGroupValue.setText(Component.literal(sourceDisplayValue(sourceInfo.group())));
             main.setDisplay(true);
-            eventMain.setDisplay(false);
-            if (eventButtonReference[0] != null) {
-                eventButtonReference[0].setActive(true);
-            }
             title.setText(Component.translatable(type.translationKey()));
             panels.forEach((panelType, panel) -> panel.setDisplay(panelType == type));
             workstationButtons.forEach((buttonType, button) -> button.setActive(buttonType != type));
@@ -354,24 +442,22 @@ public final class RecipeEditorUi {
         });
         root.addChild(jeiBridge);
 
-        var eventButton = new Button();
-        eventButton.setText("");
-        eventButton.addPreIcon(new ItemStackTexture(Items.COMMAND_BLOCK));
-        eventButton.layout(style -> style.width(20).height(20));
-        eventButton.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.event.editor.title")));
-        eventButtonReference[0] = eventButton;
-        captureClick(eventButton, "切换到事件编辑器", event -> {
-            main.setDisplay(false);
-            eventMain.setDisplay(true);
-            workstationButtons.values().forEach(button -> button.setActive(true));
-            eventButton.setActive(false);
-        });
-        sidebar.addChild(eventButton);
+        contentBody.addChildren(sidebar, main);
+        root.addChildren(header, contentBody);
 
-        root.addChildren(sidebar, main, eventMain);
+        // MODERN 主题默认使用仅含拉丁字形的 JetBrains Mono；覆盖字体以正确显示中文翻译。
+        root.addLocalStylesheet("""
+                text, label,
+                text-field:host,
+                text-area,
+                .__tag-field_text-field__,
+                .__search-component_text-field__ {
+                  font: minecraft:default;
+                }
+                """);
 
         return new ModularUI(
-                UI.of(root, StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MC)),
+                UI.of(root, StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MODERN)),
                 holder.player
         );
     }
@@ -386,6 +472,7 @@ public final class RecipeEditorUi {
         return switch (type) {
             case CRAFTING -> createCraftingPanel(root, holder, session);
             case FURNACE, SMOKER, BLAST_FURNACE -> createCookingPanel(root, holder, session, type);
+            case CAMPFIRE -> createCampfirePanel(root, holder, session);
             case STONECUTTER -> createSingleInputPanel(root, holder, session, type);
             case SMITHING -> createSmithingPanel(root, holder, session);
         };
@@ -485,6 +572,44 @@ public final class RecipeEditorUi {
             }
         }, true);
         return fuel;
+    }
+
+    /** 创建营火烹饪面板：营火不需要燃料槽，但保留经验与烹饪时间设置。 */
+    private static UIElement createCampfirePanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.CAMPFIRE;
+        var experience = numericField(Float.toString(session.getExperience(type)), 0.0F, 10000.0F, 48);
+        experience.setId(cookingExperienceId(type));
+        experience.registerValueListener(value -> session.setExperience(type, parseFloat(value, 0.0F)));
+        var cookingTime = numericField(Integer.toString(session.getCookingTime(type)), 1, 72000, 48);
+        cookingTime.setId(cookingTimeId(type));
+        cookingTime.registerValueListener(value -> session.setCookingTime(type, parseInt(value, type.defaultCookingTime())));
+
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(88));
+        panel.lss("flex-direction", "column");
+
+        var recipe = workstationRow(14);
+        recipe.addChildren(
+                createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.ingredient"),
+                recipeArrow(),
+                createOutputSlot(root, holder, session, type)
+        );
+
+        var values = new UIElement();
+        values.layout(style -> style.width(184).height(22).gapAll(4));
+        values.lss("flex-direction", "row");
+        var experienceRow = labeledField("kubejs_recipe_ui.cooking.experience", experience);
+        experienceRow.layout(style -> style.width(90).height(20));
+        var timeRow = labeledField("kubejs_recipe_ui.cooking.time", cookingTime);
+        timeRow.layout(style -> style.width(90).height(20));
+        values.addChildren(experienceRow, timeRow);
+
+        panel.addChildren(recipe, values);
+        return panel;
     }
 
     /** 创建切石机使用的单输入配方面板。 */
@@ -724,14 +849,65 @@ public final class RecipeEditorUi {
         return button;
     }
 
-    /** 创建控制输入或输出数据组件是否参与生成的开关。 */
-    private static Toggle componentToggle(String translationKey, boolean enabled, float width) {
-        var toggle = new Toggle();
-        toggle.toggleLabel.setText(Component.translatable(translationKey));
-        toggle.setOn(enabled, false);
-        toggle.layout(style -> style.width(width).height(18));
-        toggle.style(style -> style.tooltips(Component.translatable(translationKey + ".tooltip")));
-        return toggle;
+    /** 创建控制输入或输出数据组件是否参与生成的 LDLib2 现代开关。 */
+    private static Switch componentSwitch(String translationKey, boolean enabled) {
+        var control = new Switch();
+        control.setOn(enabled, false);
+        control.layout(style -> style.width(26).height(14));
+        control.style(style -> style.tooltips(Component.translatable(translationKey + ".tooltip")));
+        return control;
+    }
+
+    /** 将现代开关与可翻译标签组合成属性检查器中的一行。 */
+    private static UIElement switchOptionRow(String translationKey, Switch control) {
+        var row = new UIElement();
+        row.layout(style -> style.widthPercent(100).height(20).gapAll(4));
+        row.lss("flex-direction", "row");
+        row.lss("align-items", "center");
+
+        var label = new Label();
+        label.setText(Component.translatable(translationKey));
+        label.layout(style -> style.flex(1).height(16));
+        label.textStyle(style -> style.textAlignVertical(Vertical.CENTER));
+        row.addChildren(label, control);
+        row.style(style -> style.tooltips(Component.translatable(translationKey + ".tooltip")));
+        return row;
+    }
+
+    /** 创建现代编辑器属性检查器的分组标题。 */
+    private static Label editorSectionLabel(String translationKey) {
+        var label = new Label();
+        label.setText(Component.translatable(translationKey));
+        label.layout(style -> style.widthPercent(100).height(14).marginTop(2));
+        label.textStyle(style -> style.textAlignVertical(Vertical.CENTER));
+        return label;
+    }
+
+    /** 创建 JEI 来源页使用的长文本值标签。 */
+    private static Label sourceValueLabel() {
+        var label = slowRollingLabel("-");
+        label.layout(style -> style.flex(1).height(16));
+        return label;
+    }
+
+    /** 创建 JEI 来源信息的一行键值显示。 */
+    private static UIElement sourceInfoRow(String translationKey, Label value) {
+        var row = new UIElement();
+        row.layout(style -> style.widthPercent(100).height(18).gapAll(6));
+        row.lss("flex-direction", "row");
+        row.lss("align-items", "center");
+
+        var key = new Label();
+        key.setText(Component.translatable(translationKey));
+        key.layout(style -> style.width(82).height(16));
+        key.textStyle(style -> style.textAlignVertical(Vertical.CENTER));
+        row.addChildren(key, value);
+        return row;
+    }
+
+    /** 将 JEI 缺失的来源字段显示为短横线。 */
+    private static String sourceDisplayValue(String value) {
+        return value == null || value.isBlank() ? "-" : value;
     }
 
     /**
@@ -955,405 +1131,9 @@ public final class RecipeEditorUi {
         };
     }
 
-    /** 创建与配方编辑器复用同一主窗口的 KubeJS 事件编辑面板。 */
-    private static UIElement createEventEditorPanel(BlockUIMenuType.BlockUIHolder holder) {
-        var main = new UIElement();
-        main.layout(style -> style
-                .width(258)
-                .height(445)
-                .paddingAll(9)
-                .gapAll(1)
-        );
-        main.lss("flex-direction", "column");
-        main.addClass("panel_bg");
-
-        var title = new Label();
-        title.setText(Component.translatable("kubejs_recipe_ui.event.editor.title"));
-        title.textStyle(style -> style.textAlignHorizontal(Horizontal.CENTER));
-        title.layout(style -> style.height(16));
-        main.addChild(title);
-
-        var events = KubeJsEventCatalog.all();
-        if (events.isEmpty()) {
-            var empty = new Label();
-            empty.setText(Component.translatable("kubejs_recipe_ui.event.message.empty"));
-            empty.layout(style -> style.widthPercent(100).height(20));
-            main.addChild(empty);
-            return main;
-        }
-
-        var eventByDisplay = new HashMap<String, EventDescriptor>();
-        var eventCandidates = events.stream().map(event -> {
-            var display = eventDisplay(event);
-            eventByDisplay.put(display, event);
-            return display;
-        }).toList();
-        var selectedEvent = new EventDescriptor[]{events.getFirst()};
-        var selectedType = new ScriptType[]{events.getFirst().scriptTypes().getFirst()};
-        var selectedMethod = new EventMethodOption[1];
-
-        var eventSelector = new Selector<String>();
-        eventSelector.dialog.style(style -> style.zIndex(200));
-        eventSelector.setCandidates(eventCandidates).setSelected(eventCandidates.getFirst());
-        eventSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
-        eventSelector.layout(style -> style.widthPercent(100).height(20));
-
-        var typeByDisplay = new HashMap<String, ScriptType>();
-        var typeSelector = new Selector<String>();
-        typeSelector.dialog.style(style -> style.zIndex(200));
-        typeSelector.layout(style -> style.widthPercent(100).height(20));
-
-        var methodSelector = new Selector<EventMethodOption>();
-        methodSelector.dialog.style(style -> style.zIndex(200));
-        methodSelector.setCandidateUIProvider(method -> slowRollingLabel(
-                method == null ? "" : eventMethodDisplay(method)
-        ));
-        methodSelector.layout(style -> style.widthPercent(100).height(20));
-
-        var targetLabel = fieldLabel("kubejs_recipe_ui.event.target");
-        var targetField = new TextField();
-        targetField.setAnyString();
-        targetField.layout(style -> style.widthPercent(100).height(20));
-        targetField.textFieldStyle(style -> style.placeholder(
-                Component.translatable("kubejs_recipe_ui.event.target.placeholder")
-        ));
-
-        var targetSelector = new Selector<EventTargetOption>();
-        targetSelector.dialog.style(style -> style.zIndex(200));
-        targetSelector.setCandidateUIProvider(option -> slowRollingLabel(
-                option == null ? "" : option.displayText()
-        ));
-        targetSelector.layout(style -> style.widthPercent(100).height(20));
-        var targetCandidates = new java.util.concurrent.atomic.AtomicReference<>(
-                java.util.List.<EventTargetOption>of()
-        );
-        targetSelector.setOnValueChanged(option -> {
-            if (option != null) {
-                targetField.setText(option.id());
-            }
-        });
-
-        var targetRow = new UIElement();
-        targetRow.layout(style -> style.widthPercent(100).height(42).gapAll(2));
-        targetRow.lss("flex-direction", "column");
-        targetRow.addChildren(targetField, targetSelector);
-
-        var editor = new CodeEditor();
-        editor.setLanguage(Languages.JAVASCRIPT);
-        editor.layout(style -> style.widthPercent(100).height(190));
-
-        Runnable updateCode = () -> {
-            try {
-                var code = EventScriptGenerator.generate(
-                        selectedEvent[0],
-                        selectedType[0],
-                        targetField.getText(),
-                        selectedMethod[0]
-                );
-                editor.setValue(code.split("\\R", -1), false);
-            } catch (IllegalArgumentException exception) {
-                Dialog.showNotification(exception.getMessage(), 3.0F);
-            }
-        };
-        java.util.function.Consumer<EventDescriptor> updateEvent = event -> {
-            selectedEvent[0] = event;
-            typeByDisplay.clear();
-            var candidates = event.scriptTypes().stream().map(type -> {
-                var display = scriptTypeText(type);
-                typeByDisplay.put(display, type);
-                return display;
-            }).toList();
-            selectedType[0] = event.scriptTypes().getFirst();
-            typeSelector.setCandidates(candidates).setSelected(candidates.getFirst());
-            var methods = new ArrayList<EventMethodOption>();
-            methods.add(EventMethodOption.NONE);
-            methods.addAll(EventMethodCatalog.candidates(event));
-            selectedMethod[0] = null;
-            methodSelector.setCandidates(methods).setSelected(EventMethodOption.NONE, false);
-            var targets = EventTargetCatalog.candidates(event.targetKind(), holder.player.registryAccess());
-            targetCandidates.set(targets);
-            var visibleTargets = filterTargetCandidates(targets, "");
-            targetSelector.setCandidates(visibleTargets);
-            targetSelector.setDisplay(event.supportsTarget() && !targets.isEmpty());
-            targetLabel.setDisplay(event.supportsTarget());
-            targetRow.setDisplay(event.supportsTarget());
-            var initialTarget = event.targetRequired() && !targets.isEmpty()
-                    ? targets.getFirst().id()
-                    : event.targetRequired() ? "minecraft:target" : "";
-            targetField.setText(initialTarget);
-            if (!visibleTargets.isEmpty()) {
-                targetSelector.setSelected(visibleTargets.getFirst(), false);
-            }
-            updateCode.run();
-        };
-        eventSelector.setOnValueChanged(value -> {
-            var event = eventByDisplay.get(value);
-            if (event != null) {
-                updateEvent.accept(event);
-            }
-        });
-        typeSelector.setOnValueChanged(value -> {
-            var type = typeByDisplay.get(value);
-            if (type != null) {
-                selectedType[0] = type;
-                updateCode.run();
-            }
-        });
-        methodSelector.setOnValueChanged(method -> {
-            if (method != null) {
-                selectedMethod[0] = method == EventMethodOption.NONE ? null : method;
-                updateCode.run();
-            }
-        });
-        targetField.registerValueListener(value -> {
-            var candidates = filterTargetCandidates(targetCandidates.get(), value);
-            targetSelector.setCandidates(candidates);
-            if (!candidates.isEmpty()) {
-                targetSelector.setSelected(candidates.getFirst(), false);
-            }
-            if (!selectedEvent[0].targetRequired() || !value.isBlank()) {
-                updateCode.run();
-            }
-        });
-        updateEvent.accept(selectedEvent[0]);
-
-        main.addChildren(
-                fieldLabel("kubejs_recipe_ui.event.select"), eventSelector,
-                fieldLabel("kubejs_recipe_ui.event.script_type"), typeSelector,
-                targetLabel, targetRow,
-                fieldLabel("kubejs_recipe_ui.event.method"), methodSelector
-        );
-
-        var actions = new UIElement();
-        actions.layout(style -> style.widthPercent(100).height(22).gapAll(4));
-        actions.lss("flex-direction", "row");
-        var regenerate = actionButton(Component.translatable("kubejs_recipe_ui.event.action.regenerate"), 70);
-        captureClick(regenerate, "重新生成事件骨架", event -> updateCode.run());
-        var copy = actionButton(Component.translatable("kubejs_recipe_ui.action.copy"), 60);
-        captureClick(copy, "复制事件代码", event -> ClipboardManager.INSTANCE.copyDirect(editorCode(editor)));
-        var write = actionButton(Component.translatable("kubejs_recipe_ui.action.write"), 60);
-        var writeRpc = write.addRPCEvent(RPCEventBuilder.simple(
-                String.class,
-                String.class,
-                payload -> holder.player instanceof ServerPlayer serverPlayer
-                        ? EventWriteService.write(serverPlayer, payload)
-                        : EventWriteService.FAILED
-        ));
-        captureClick(write, "写入事件脚本", event -> {
-            var code = editorCode(editor).trim();
-            if (code.isEmpty()) {
-                Dialog.showNotification(translate("kubejs_recipe_ui.event.message.preview_required"), 3.0F);
-                return;
-            }
-            var payload = selectedType[0].name() + "\n" + code;
-            writeRpc.send(result -> showWriteResult(result, EventWriteService.FAILED), payload);
-        });
-        actions.addChildren(regenerate, copy, write);
-
-        var previewLabel = new Label();
-        previewLabel.setText(Component.translatable("kubejs_recipe_ui.preview.inline_title"));
-        previewLabel.layout(style -> style.height(11));
-        main.addChildren(actions, previewLabel, editor);
-        return main;
-    }
-
     /** 将代码编辑器的行数组合并为平台无关的换行文本。 */
     private static String editorCode(CodeEditor editor) {
         return String.join("\n", editor.getValue());
-    }
-
-    /** 组合事件完整名称与中文翻译，供事件下拉框显示。 */
-    private static String eventDisplay(EventDescriptor event) {
-        var groupKey = "kubejs_recipe_ui.event.group." + event.group();
-        var nameKey = "kubejs_recipe_ui.event.name." + event.name();
-        var group = translate(groupKey);
-        var name = translate(nameKey);
-        group = group.equals(groupKey) ? event.group() : group;
-        name = name.equals(nameKey) ? translateEventName(event.name()) : name;
-        group = group.replaceFirst("(?i)\\s*events?$", "").replaceFirst("事件$", "");
-        return Component.translatable(
-                "kubejs_recipe_ui.event.display",
-                event.id(),
-                group + name
-        ).getString();
-    }
-
-    /** 组合事件方法翻译和签名，供方法下拉框区分重载。 */
-    private static String eventMethodDisplay(EventMethodOption method) {
-        if (method == EventMethodOption.NONE) {
-            return translate("kubejs_recipe_ui.event.method.none");
-        }
-        var key = "kubejs_recipe_ui.event.method." + method.name();
-        var translated = translate(key);
-        if (translated.equals(key)) {
-            translated = translateMethodName(method.name());
-        }
-        return method.displayText(translated);
-    }
-
-    /** 翻译常见事件方法名称，缺少翻译时回退到可读英文。 */
-    private static String translateMethodName(String name) {
-        var translated = switch (name) {
-            case "cancel" -> "取消事件";
-            case "success" -> "成功结束事件";
-            case "exit" -> "结束事件";
-            case "getBlock" -> "获取方块";
-            case "getEntity" -> "获取实体";
-            case "getPlayer" -> "获取玩家";
-            case "getLevel" -> "获取世界";
-            case "getItem" -> "获取物品";
-            case "getFacing" -> "获取方向";
-            case "getHand" -> "获取交互手";
-            case "getXp" -> "获取经验";
-            case "setXp" -> "设置经验";
-            case "getItems" -> "获取物品列表";
-            case "addItem" -> "添加物品";
-            case "removeItem" -> "移除物品";
-            case "containsItem" -> "检查物品";
-            default -> null;
-        };
-        if (translated != null) {
-            return translated;
-        }
-        for (var prefix : new String[][]{
-                {"get", "获取"},
-                {"set", "设置"},
-                {"add", "添加"},
-                {"remove", "移除"},
-                {"modify", "修改"},
-                {"replace", "替换"},
-                {"contains", "检查是否包含"},
-                {"is", "是否"},
-                {"has", "是否拥有"},
-                {"can", "是否可以"}
-        }) {
-            if (name.startsWith(prefix[0]) && name.length() > prefix[0].length()) {
-                return prefix[1] + translateEventName(name.substring(prefix[0].length()));
-            }
-        }
-        return humanizeEventName(name);
-    }
-
-    /** 将 camelCase 或资源路径转换为便于阅读的标题文本。 */
-    private static String humanizeEventName(String name) {
-        var spaced = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2");
-        if (spaced.isEmpty()) {
-            return name;
-        }
-        return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
-    }
-
-    /** 根据事件名称查找本模组语言文件中的翻译。 */
-    private static String translateEventName(String name) {
-        var words = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2").split("\\s+");
-        var translated = new StringBuilder();
-        for (var word : words) {
-            // 第三方事件没有语言条目时，按事件名中的常见英文词语生成中文兜底名称。
-            var part = switch (word.toLowerCase(java.util.Locale.ROOT)) {
-                case "add", "added" -> "添加";
-                case "advancement" -> "进度";
-                case "after" -> "后";
-                case "assets" -> "资源";
-                case "atlas" -> "图集";
-                case "basic" -> "基础";
-                case "before" -> "前";
-                case "block" -> "方块";
-                case "broken" -> "破坏";
-                case "can" -> "可";
-                case "categories" -> "分类";
-                case "changed" -> "变化";
-                case "chat" -> "聊天";
-                case "check" -> "检查";
-                case "chest" -> "箱子";
-                case "clicked" -> "点击";
-                case "closed" -> "关闭";
-                case "command" -> "命令";
-                case "completely" -> "彻底";
-                case "creative" -> "创造模式";
-                case "data" -> "数据";
-                case "death" -> "死亡";
-                case "debug" -> "调试";
-                case "decorate" -> "装饰";
-                case "destroyed" -> "损坏";
-                case "detector" -> "探测器";
-                case "dropped", "drops" -> "掉落";
-                case "dynamic" -> "动态";
-                case "eaten" -> "食用";
-                case "entity" -> "实体";
-                case "entries" -> "条目";
-                case "explosion" -> "爆炸";
-                case "falling" -> "下落";
-                case "farmland" -> "农田";
-                case "first" -> "首次";
-                case "food" -> "食物";
-                case "generate" -> "生成";
-                case "group" -> "分组";
-                case "highlight" -> "高亮";
-                case "hurt" -> "受伤";
-                case "in" -> "登录";
-                case "info", "information" -> "信息";
-                case "ingredient" -> "原料";
-                case "interacted" -> "交互";
-                case "inventory" -> "背包";
-                case "lang" -> "语言文件";
-                case "left" -> "左键";
-                case "loaded" -> "加载";
-                case "logged" -> "";
-                case "mapping" -> "映射";
-                case "menu" -> "菜单";
-                case "model" -> "模型";
-                case "modification", "modify" -> "修改";
-                case "opened" -> "打开";
-                case "out" -> "退出";
-                case "particle" -> "粒子";
-                case "pick", "picked" -> "拾取";
-                case "placed" -> "放置";
-                case "post" -> "后";
-                case "powered" -> "通电";
-                case "pressed" -> "按下";
-                case "properties" -> "属性";
-                case "provider" -> "提供器";
-                case "public" -> "公开";
-                case "random" -> "随机";
-                case "received" -> "接收";
-                case "recipe", "recipes" -> "配方";
-                case "register", "registry" -> "注册";
-                case "released" -> "松开";
-                case "remove", "removed" -> "移除";
-                case "renderer" -> "渲染器";
-                case "respawned" -> "重生";
-                case "result" -> "结果";
-                case "right" -> "右键";
-                case "saved" -> "保存";
-                case "schema" -> "架构";
-                case "screen" -> "界面";
-                case "serializers" -> "序列化器";
-                case "smelted" -> "烧炼";
-                case "spawn", "spawned" -> "生成";
-                case "special" -> "特殊";
-                case "sprite" -> "纹理";
-                case "stage" -> "游戏阶段";
-                case "started" -> "开始";
-                case "stopped" -> "停止";
-                case "subtypes" -> "子类型";
-                case "tab" -> "物品栏";
-                case "tags" -> "标签";
-                case "tick" -> "刻更新";
-                case "tier" -> "等级";
-                case "tool" -> "工具";
-                case "tooltips" -> "提示文本";
-                case "trampled" -> "被踩踏";
-                case "unloaded" -> "卸载";
-                case "unpowered" -> "断电";
-                case "up" -> "";
-                default -> null;
-            };
-            if (part == null) {
-                return humanizeEventName(name);
-            }
-            translated.append(part);
-        }
-        return translated.isEmpty() ? humanizeEventName(name) : translated.toString();
     }
 
     /** 创建滚动速度较慢的长文本标签，确保下拉选项可读。 */
@@ -1370,30 +1150,17 @@ public final class RecipeEditorUi {
         return label;
     }
 
-    /** 按 ID 和翻译名称对事件目标候选项执行不区分大小写搜索。 */
-    private static java.util.List<EventTargetOption> filterTargetCandidates(
-            java.util.List<EventTargetOption> candidates,
-            String query
-    ) {
-        var normalized = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
-        return candidates.stream()
-                .filter(candidate -> normalized.isEmpty()
-                        || candidate.id().toLowerCase(java.util.Locale.ROOT).contains(normalized)
-                        || candidate.name().toLowerCase(java.util.Locale.ROOT).contains(normalized))
-                .limit(200)
-                .toList();
-    }
-
-    /** @return 启动、服务端或客户端脚本端的本地化名称 */
-    private static String scriptTypeText(ScriptType type) {
-        return translate("kubejs_recipe_ui.event.script_type." + type.name().toLowerCase(java.util.Locale.ROOT));
+    /** 将提示同时显示在游戏聊天栏和当前 LDLib2 界面中。 */
+    private static void showInGameMessage(Player player, String translationKey) {
+        var message = Component.translatable(translationKey);
+        player.sendSystemMessage(message);
+        Dialog.showNotification(message.getString(), 3.0F);
     }
 
     /** 显示服务端返回的写入结果，成功和失败都会给玩家明确反馈。 */
-    private static void showWriteResult(Object result, String fallbackKey) {
+    private static void showWriteResult(Player player, Object result, String fallbackKey) {
         var translationKey = result instanceof String value && !value.isBlank() ? value : fallbackKey;
-        Dialog.showNotification(translate(translationKey), 3.0F);
-        LOGGER.info("[工作台编辑器] 脚本写入结果: {}", translationKey);
+        showInGameMessage(player, translationKey);
     }
 
     /**
@@ -1408,19 +1175,15 @@ public final class RecipeEditorUi {
             java.util.function.Consumer<String> consumer
     ) {
         try {
-            var deleteValue = session.createDeleteValue(
+            var recipe = session.createDefinition(includeInputComponents, includeOutputComponents);
+            var code = generateStandardRecipe(
+                    session,
+                    recipe,
+                    writeMode,
                     deleteMode,
                     includeInputComponents,
                     includeOutputComponents
             );
-            var code = writeMode == RecipeWriteMode.REMOVE_ONLY
-                    ? KubeJsRecipeGenerator.generateRemove(deleteMode, deleteValue)
-                    : KubeJsRecipeGenerator.generate(
-                            session.createDefinition(includeInputComponents, includeOutputComponents),
-                            writeMode,
-                            deleteMode,
-                            deleteValue
-                    );
             LOGGER.info(
                     "[工作台编辑器] 代码生成成功: 类型={}, 写入方式={}, 删除依据={}, 原料组件={}, 输出组件={}, 代码长度={}",
                     session.getActiveType(),
@@ -1433,8 +1196,26 @@ public final class RecipeEditorUi {
             consumer.accept(code);
         } catch (IllegalArgumentException exception) {
             LOGGER.warn("[工作台编辑器] 代码生成失败: {}", exception.getMessage());
-            Dialog.showNotification(exception.getMessage(), 3.0F);
+            var message = exception.getMessage();
+            Dialog.showNotification(message != null && message.startsWith("kubejs_recipe_ui.")
+                    ? translate(message)
+                    : message, 3.0F);
         }
+    }
+
+    /** 生成普通 KubeJS 配方事件代码，并保留既有的删除条件提取规则。*/
+    private static String generateStandardRecipe(
+            RecipeEditorSession session,
+            RecipeDefinition recipe,
+            RecipeWriteMode writeMode,
+            RecipeDeleteMode deleteMode,
+            boolean includeInputComponents,
+            boolean includeOutputComponents
+    ) {
+        var deleteValue = session.createDeleteValue(deleteMode, includeInputComponents, includeOutputComponents);
+        return writeMode == RecipeWriteMode.REMOVE_ONLY
+                ? KubeJsRecipeGenerator.generateRemove(deleteMode, deleteValue)
+                : KubeJsRecipeGenerator.generate(recipe, writeMode, deleteMode, deleteValue);
     }
 
     /** 创建带标题和滚动内容区域的通用模态弹窗。 */

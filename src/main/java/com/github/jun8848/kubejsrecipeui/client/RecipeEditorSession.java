@@ -39,7 +39,7 @@ public final class RecipeEditorSession {
     public RecipeEditorSession(Player player) {
         this.player = player;
         for (var type : WorkstationType.values()) {
-            states.put(type, new EditorState(type.inputCount()));
+            states.put(type, new EditorState(type));
         }
     }
 
@@ -52,11 +52,6 @@ public final class RecipeEditorSession {
     public void setActiveType(WorkstationType activeType) {
         this.activeType = activeType;
         LOGGER.info("[工作台编辑器] 切换工作方块: {}", activeType);
-    }
-
-    /** @return 当前工作站指定输入槽位的物品快照 */
-    public ItemStack getInputStack(int index) {
-        return getInputStack(activeType, index);
     }
 
     /** @return 指定工作站和槽位的物品快照 */
@@ -88,12 +83,7 @@ public final class RecipeEditorSession {
 
     /** @return 当前工作站指定槽位的原料表达式 */
     public IngredientSpec getInputSpec(int index) {
-        return getInputSpec(activeType, index);
-    }
-
-    /** @return 指定工作站和槽位的原料表达式 */
-    public IngredientSpec getInputSpec(WorkstationType type, int index) {
-        return state(type).inputSpecs[index];
+        return state(activeType).inputSpecs[index];
     }
 
     /** 保存原料设置弹窗生成的物品、标签或替代材料描述。 */
@@ -156,11 +146,6 @@ public final class RecipeEditorSession {
     /** 由 JEI 转移结果直接设置工作台配方形状。 */
     public void setShaped(boolean shaped) {
         state(WorkstationType.CRAFTING).shaped = shaped;
-    }
-
-    /** @return 最近一次 JEI 转移得到的配方来源信息 */
-    public RecipeSourceInfo getSourceInfo() {
-        return sourceInfo;
     }
 
     /** 更新配方 ID、类型、来源模组和分组。 */
@@ -241,11 +226,6 @@ public final class RecipeEditorSession {
         return tags;
     }
 
-    /** 使用当前的组件开关默认值创建配方快照。 */
-    public RecipeDefinition createDefinition() {
-        return createDefinition(true, true);
-    }
-
     /**
      * 创建供代码生成器使用的不可变配方快照，并按开关移除输入或输出组件。
      */
@@ -256,6 +236,7 @@ public final class RecipeEditorSession {
                 .map(spec -> includeInputComponents ? spec : withoutComponents(spec))
                 .toList();
         return new RecipeDefinition(
+                sourceInfo.id(),
                 activeType,
                 state.shaped,
                 new ArrayList<>(inputs),
@@ -394,11 +375,12 @@ public final class RecipeEditorSession {
         private ItemStack outputStack = ItemStack.EMPTY;
         private boolean shaped = true;
         private float experience;
-        private int cookingTime = 200;
+        private int cookingTime;
 
-        private EditorState(int inputCount) {
-            inputStacks = new ItemStack[inputCount];
-            inputSpecs = new IngredientSpec[inputCount];
+        private EditorState(WorkstationType type) {
+            inputStacks = new ItemStack[type.inputCount()];
+            inputSpecs = new IngredientSpec[type.inputCount()];
+            cookingTime = type.defaultCookingTime();
             Arrays.fill(inputStacks, ItemStack.EMPTY);
         }
     }

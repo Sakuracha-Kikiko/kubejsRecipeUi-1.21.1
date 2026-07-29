@@ -9,6 +9,7 @@ public enum WorkstationType {
     FURNACE("kubejs_recipe_ui.workstation.furnace", Items.FURNACE, 1),
     SMOKER("kubejs_recipe_ui.workstation.smoker", Items.SMOKER, 1),
     BLAST_FURNACE("kubejs_recipe_ui.workstation.blast_furnace", Items.BLAST_FURNACE, 1),
+    CAMPFIRE("kubejs_recipe_ui.workstation.campfire", Items.CAMPFIRE, 1),
     STONECUTTER("kubejs_recipe_ui.workstation.stonecutter", Items.STONECUTTER, 1),
     SMITHING("kubejs_recipe_ui.workstation.smithing", Items.SMITHING_TABLE, 3);
 
@@ -39,6 +40,11 @@ public enum WorkstationType {
 
     /** @return 当前类型是否需要经验和烹饪时间参数 */
     public boolean isCooking() {
-        return this == FURNACE || this == SMOKER || this == BLAST_FURNACE;
+        return this == FURNACE || this == SMOKER || this == BLAST_FURNACE || this == CAMPFIRE;
+    }
+
+    /** @return 新建编辑器状态时使用的原版默认烹饪时间 */
+    public int defaultCookingTime() {
+        return this == CAMPFIRE ? 600 : 200;
     }
 }

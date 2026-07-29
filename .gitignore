@@ -37,6 +37,8 @@ run/
 /logs/
 /runclient.out
 /runclient.err
+/runClient*.log
+/net/
 !**/src/**/run/
 **/src/generated/**/.cache/
 repo/
