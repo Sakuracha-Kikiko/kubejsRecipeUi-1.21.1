@@ -3,6 +3,7 @@ package com.github.jun8848.kubejsrecipeui.integration.jei;
 import com.github.jun8848.kubejsrecipeui.KubeJsRecipeUi;
 import com.github.jun8848.kubejsrecipeui.client.RecipeEditorJeiBridge;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
+import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIContainerMenu;
 import mezz.jei.api.IModPlugin;
@@ -24,6 +25,7 @@ import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.neoforged.fml.ModList;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -52,6 +54,9 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         register(registration, RecipeTypes.CAMPFIRE_COOKING, WorkstationType.CAMPFIRE);
         register(registration, RecipeTypes.STONECUTTING, WorkstationType.STONECUTTER);
         register(registration, RecipeTypes.SMITHING, WorkstationType.SMITHING);
+        if (ModList.get().isLoaded(WorkstationType.EXTENDED_CRAFTING_MOD_ID)) {
+            ExtendedCraftingJeiIntegration.register(registration);
+        }
     }
 
     private static <R extends Recipe<?>> void register(
@@ -134,7 +139,18 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
             // 烹饪配方还需要同步 JEI 配方对象中的经验和时间，而不是沿用界面默认值。
             var experience = recipe instanceof AbstractCookingRecipe cooking ? cooking.experience() : 0.0F;
             var cookingTime = recipe instanceof AbstractCookingRecipe cooking ? cooking.cookingTime() : 200;
-            bridge.fill(workstationType, List.copyOf(inputs), output, sourceInfo, shaped, width, height, experience, cookingTime);
+            bridge.fill(
+                    workstationType,
+                    List.copyOf(inputs),
+                    output,
+                    sourceInfo,
+                    shaped,
+                    width,
+                    height,
+                    experience,
+                    cookingTime,
+                    ExtendedRecipeSettings.defaults(workstationType)
+            );
             return null;
         }
     }

@@ -35,6 +35,14 @@ repositories {
         }
     }
     maven {
+        name = 'BlakesMods'
+        url = 'https://maven.blakesmods.com'
+        content {
+            includeGroup 'com.blakebr0.extendedcrafting'
+            includeGroup 'com.blakebr0.cucumber'
+        }
+    }
+    maven {
         name = 'Modrinth'
         url = 'https://api.modrinth.com/maven'
         content {
@@ -87,6 +95,13 @@ dependencies {
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+
+    // Extended Crafting 是可选集成；仅在开发客户端加入完整运行依赖。
+    compileOnly "com.blakebr0.extendedcrafting:ExtendedCrafting:${extended_crafting_version}"
+    localRuntime("com.blakebr0.extendedcrafting:ExtendedCrafting:${extended_crafting_version}") {
+        // Jade 只是上游的可选显示集成，编辑器开发环境不需要下载 CurseMaven 文件。
+        exclude group: 'curse.maven', module: 'jade-324717'
+    }
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -95,6 +110,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             neo_version_range      : neo_version_range,
             jei_version_range      : jei_version_range,
             ldlib2_version_range   : ldlib2_version_range,
+            extended_crafting_version_range: extended_crafting_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,

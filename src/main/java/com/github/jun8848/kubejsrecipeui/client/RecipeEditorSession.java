@@ -1,6 +1,7 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
+import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.OutputSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDefinition;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDeleteMode;
@@ -132,20 +133,70 @@ public final class RecipeEditorSession {
         LOGGER.info("[工作台编辑器] 输出数量更新: {}", count);
     }
 
-    /** @return 工作台配方是否为有序配方 */
+    /** @return 当前工作站配方是否为有序配方 */
     public boolean isShaped() {
-        return state(WorkstationType.CRAFTING).shaped;
+        return state(activeType).shaped;
     }
 
-    /** 在有序和无序工作台配方之间切换。 */
+    /** 在当前支持形状的工作站上切换有序和无序。 */
     public void toggleShaped() {
-        var state = state(WorkstationType.CRAFTING);
+        var state = state(activeType);
         state.shaped = !state.shaped;
     }
 
-    /** 由 JEI 转移结果直接设置工作台配方形状。 */
+    /** 由 JEI 转移结果直接设置当前工作站配方形状。 */
     public void setShaped(boolean shaped) {
-        state(WorkstationType.CRAFTING).shaped = shaped;
+        state(activeType).shaped = shaped;
+    }
+
+    public int getExtendedTier(WorkstationType type) {
+        return state(type).extendedTier;
+    }
+
+    public void setExtendedTier(WorkstationType type, int tier) {
+        state(type).extendedTier = tier;
+    }
+
+    public int getPowerCost(WorkstationType type) {
+        return state(type).powerCost;
+    }
+
+    public void setPowerCost(WorkstationType type, int powerCost) {
+        state(type).powerCost = powerCost;
+    }
+
+    public int getPowerRate(WorkstationType type) {
+        return state(type).powerRate;
+    }
+
+    public void setPowerRate(WorkstationType type, int powerRate) {
+        state(type).powerRate = powerRate;
+    }
+
+    public int getIngredientCount(WorkstationType type) {
+        return state(type).ingredientCount;
+    }
+
+    public void setIngredientCount(WorkstationType type, int ingredientCount) {
+        state(type).ingredientCount = ingredientCount;
+    }
+
+    public int getExtendedCraftingTime(WorkstationType type) {
+        return state(type).extendedCraftingTime;
+    }
+
+    public void setExtendedCraftingTime(WorkstationType type, int craftingTime) {
+        state(type).extendedCraftingTime = craftingTime;
+    }
+
+    /** 批量应用 JEI 读取到的 Extended Crafting 专属参数。 */
+    public void setExtendedSettings(WorkstationType type, ExtendedRecipeSettings settings) {
+        var state = state(type);
+        state.extendedTier = settings.tier();
+        state.powerCost = settings.powerCost();
+        state.powerRate = settings.powerRate();
+        state.ingredientCount = settings.ingredientCount();
+        state.extendedCraftingTime = settings.craftingTime();
     }
 
     /** 更新配方 ID、类型、来源模组和分组。 */
@@ -242,7 +293,14 @@ public final class RecipeEditorSession {
                 new ArrayList<>(inputs),
                 output,
                 state.experience,
-                state.cookingTime
+                state.cookingTime,
+                new ExtendedRecipeSettings(
+                        state.extendedTier,
+                        state.powerCost,
+                        state.powerRate,
+                        state.ingredientCount,
+                        state.extendedCraftingTime
+                )
         );
     }
 
@@ -376,11 +434,21 @@ public final class RecipeEditorSession {
         private boolean shaped = true;
         private float experience;
         private int cookingTime;
+        private int extendedTier;
+        private int powerCost;
+        private int powerRate;
+        private int ingredientCount;
+        private int extendedCraftingTime;
 
         private EditorState(WorkstationType type) {
             inputStacks = new ItemStack[type.inputCount()];
             inputSpecs = new IngredientSpec[type.inputCount()];
             cookingTime = type.defaultCookingTime();
+            extendedTier = type.extendedTier();
+            powerCost = type.defaultPowerCost();
+            powerRate = type.defaultPowerRate();
+            ingredientCount = type.defaultIngredientCount();
+            extendedCraftingTime = type.defaultCraftingTime();
             Arrays.fill(inputStacks, ItemStack.EMPTY);
         }
     }

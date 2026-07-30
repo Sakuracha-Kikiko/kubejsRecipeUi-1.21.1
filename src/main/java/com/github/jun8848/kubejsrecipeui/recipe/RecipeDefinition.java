@@ -17,7 +17,8 @@ public record RecipeDefinition(
         List<IngredientSpec> inputs,
         OutputSpec output,
         float experience,
-        int cookingTime
+        int cookingTime,
+        ExtendedRecipeSettings extendedSettings
 ) {
     private static final Pattern RECIPE_ID_PATTERN = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
 
@@ -30,11 +31,23 @@ public record RecipeDefinition(
         }
         inputs = Collections.unmodifiableList(new ArrayList<>(inputs));
         output = Objects.requireNonNull(output, "output");
+        extendedSettings = Objects.requireNonNull(extendedSettings, "extendedSettings");
         if (inputs.stream().allMatch(Objects::isNull)) {
             throw new IllegalArgumentException("至少需要一个配方原料");
         }
         if (type == WorkstationType.SMITHING && inputs.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("锻造配方需要模板、基础物品和追加材料");
+        }
+        if (type == WorkstationType.EXTENDED_COMBINATION) {
+            if (inputs.getFirst() == null) {
+                throw new IllegalArgumentException("组合合成需要中心输入物品");
+            }
+            if (inputs.subList(1, inputs.size()).stream().allMatch(Objects::isNull)) {
+                throw new IllegalArgumentException("组合合成至少需要一个基座材料");
+            }
+        }
+        if (type == WorkstationType.EXTENDED_COMPRESSOR && inputs.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("压缩机配方需要压缩材料和催化剂");
         }
         if (!Float.isFinite(experience) || experience < 0.0F) {
             throw new IllegalArgumentException("配方经验值不能小于 0");
@@ -42,7 +55,7 @@ public record RecipeDefinition(
         if (type.isCooking() && cookingTime < 1) {
             throw new IllegalArgumentException("烹饪时间必须至少为 1 tick");
         }
-        id = normalizeRecipeId(id, type, shaped, inputs, output, experience, cookingTime);
+        id = normalizeRecipeId(id, type, shaped, inputs, output, experience, cookingTime, extendedSettings);
     }
 
     /**
@@ -55,7 +68,8 @@ public record RecipeDefinition(
             List<IngredientSpec> inputs,
             OutputSpec output,
             float experience,
-            int cookingTime
+            int cookingTime,
+            ExtendedRecipeSettings extendedSettings
     ) {
         var normalized = id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
         if (!normalized.isEmpty()) {
@@ -72,7 +86,7 @@ public record RecipeDefinition(
         var namespaceSeparator = itemId.indexOf(':');
         var outputPath = namespaceSeparator >= 0 ? itemId.substring(namespaceSeparator + 1) : itemId;
         var signature = type.name() + '|' + shaped + '|' + inputs + '|' + output
-                + '|' + experience + '|' + cookingTime;
+                + '|' + experience + '|' + cookingTime + '|' + extendedSettings;
         var hash = String.format(Locale.ROOT, "%08x", signature.hashCode());
         return "kubejs_recipe_ui:" + outputPath + "_" + hash;
     }

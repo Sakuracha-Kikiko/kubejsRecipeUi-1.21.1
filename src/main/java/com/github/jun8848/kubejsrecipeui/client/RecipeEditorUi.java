@@ -1,6 +1,7 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
+import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.KubeJsRecipeGenerator;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDeleteMode;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDefinition;
@@ -66,6 +67,10 @@ public final class RecipeEditorUi {
      */
     public static ModularUI create(BlockUIMenuType.BlockUIHolder holder) {
         var session = new RecipeEditorSession(holder.player);
+        var availableTypes = WorkstationType.availableValues();
+        var sidebarTypes = availableTypes.stream()
+                .filter(type -> !type.isExtendedTable() || type == WorkstationType.EXTENDED_BASIC_TABLE)
+                .toList();
         var root = new UIElement();
         root.layout(style -> style
                 .width(560)
@@ -160,6 +165,32 @@ public final class RecipeEditorUi {
                 switchOptionRow("kubejs_recipe_ui.recipe_components.input", inputComponents),
                 switchOptionRow("kubejs_recipe_ui.recipe_components.output", outputComponents)
         );
+
+        // 四个 Extended Crafting 工作台共用一个侧栏入口，通过下拉框切换实际网格和独立编辑状态。
+        var extendedTableByDisplay = new HashMap<String, WorkstationType>();
+        var extendedTableDisplay = new EnumMap<WorkstationType, String>(WorkstationType.class);
+        var extendedTableCandidates = availableTypes.stream()
+                .filter(WorkstationType::isExtendedTable)
+                .map(type -> {
+                    var display = translate(extendedTableLevelTranslationKey(type));
+                    extendedTableByDisplay.put(display, type);
+                    extendedTableDisplay.put(type, display);
+                    return display;
+                })
+                .toList();
+        var selectedExtendedTable = new WorkstationType[]{WorkstationType.EXTENDED_BASIC_TABLE};
+        var extendedTableSelector = new Selector<String>();
+        extendedTableSelector.dialog.style(style -> style.zIndex(200));
+        extendedTableSelector.setCandidates(extendedTableCandidates);
+        if (!extendedTableCandidates.isEmpty()) {
+            extendedTableSelector.setSelected(extendedTableCandidates.getFirst());
+        }
+        extendedTableSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
+        extendedTableSelector.layout(style -> style.width(115).height(20));
+        var extendedTableSelectorRow = labeledField("kubejs_recipe_ui.extended.table_level", extendedTableSelector);
+        extendedTableSelectorRow.layout(style -> style.widthPercent(100).height(20));
+        extendedTableSelectorRow.setDisplay(false);
+        inspectorContent.addChild(extendedTableSelectorRow);
 
         // Selector 返回显示文本，通过映射恢复实际删除枚举。
         var deleteModeByDisplay = new HashMap<String, RecipeDeleteMode>();
@@ -279,11 +310,11 @@ public final class RecipeEditorUi {
         );
 
         var editorArea = new UIElement();
-        editorArea.layout(style -> style.widthPercent(100).height(112));
+        editorArea.layout(style -> style.widthPercent(100).height(182));
         editorArea.lss("flex-direction", "column");
         // 所有工作站面板只创建一次，侧边栏切换时仅改变可见性以保留控件状态。
         var panels = new EnumMap<WorkstationType, UIElement>(WorkstationType.class);
-        for (var type : WorkstationType.values()) {
+        for (var type : availableTypes) {
             var panel = createWorkstationPanel(root, holder, session, type);
             panel.setDisplay(type == WorkstationType.CRAFTING);
             panels.put(type, panel);
@@ -335,29 +366,59 @@ public final class RecipeEditorUi {
         workspaceSplit.layout(style -> style.widthPercent(100).heightPercent(100));
 
         var editorSplit = new SplitView.Vertical();
-        editorSplit.setPercentage(68).top(workspaceSplit).bottom(bottomTabs);
+        editorSplit.setPercentage(78).top(workspaceSplit).bottom(bottomTabs);
         editorSplit.layout(style -> style.widthPercent(100).heightPercent(100));
         main.addChild(editorSplit);
 
         var workstationButtons = new EnumMap<WorkstationType, Button>(WorkstationType.class);
-        for (var type : WorkstationType.values()) {
+        for (var type : sidebarTypes) {
             var button = new Button();
             button.setText("");
             button.addPreIcon(new ItemStackTexture(type.icon()));
             button.layout(style -> style.width(20).height(20));
-            button.style(style -> style.tooltips(Component.translatable(type.translationKey())));
+            button.style(style -> style.tooltips(Component.translatable(
+                    type == WorkstationType.EXTENDED_BASIC_TABLE
+                            ? "kubejs_recipe_ui.workstation.extended_table"
+                            : type.translationKey()
+            )));
             button.setActive(type != WorkstationType.CRAFTING);
             captureClick(button, "切换工作方块: " + type, event -> {
+                var targetType = type == WorkstationType.EXTENDED_BASIC_TABLE
+                        ? selectedExtendedTable[0]
+                        : type;
                 main.setDisplay(true);
-                session.setActiveType(type);
-                title.setText(Component.translatable(type.translationKey()));
-                panels.forEach((panelType, panel) -> panel.setDisplay(panelType == type));
-                workstationButtons.forEach((buttonType, other) -> other.setActive(buttonType != type));
-                modeButton.setDisplay(type == WorkstationType.CRAFTING);
+                session.setActiveType(targetType);
+                title.setText(Component.translatable(targetType.translationKey()));
+                showWorkstationPanel(panels, targetType);
+                updateWorkstationButtons(workstationButtons, targetType);
+                extendedTableSelectorRow.setDisplay(targetType.isExtendedTable());
+                if (targetType.isExtendedTable()) {
+                    extendedTableSelector.setSelected(extendedTableDisplay.get(targetType));
+                }
+                modeButton.setDisplay(targetType.supportsShaped());
+                modeButton.setText(Component.translatable(session.isShaped()
+                        ? "kubejs_recipe_ui.action.shaped"
+                        : "kubejs_recipe_ui.action.shapeless"));
             });
             workstationButtons.put(type, button);
             sidebar.addChild(button);
         }
+
+        extendedTableSelector.setOnValueChanged(value -> {
+            var type = extendedTableByDisplay.get(value);
+            if (type == null) {
+                return;
+            }
+            selectedExtendedTable[0] = type;
+            session.setActiveType(type);
+            title.setText(Component.translatable(type.translationKey()));
+            showWorkstationPanel(panels, type);
+            updateWorkstationButtons(workstationButtons, type);
+            modeButton.setDisplay(true);
+            modeButton.setText(Component.translatable(session.isShaped()
+                    ? "kubejs_recipe_ui.action.shaped"
+                    : "kubejs_recipe_ui.action.shapeless"));
+        });
 
         // JEI 转移回调同时更新会话和已经挂载的槽位控件。
         var jeiBridge = new RecipeEditorJeiBridge((
@@ -369,7 +430,8 @@ public final class RecipeEditorUi {
                 craftingWidth,
                 craftingHeight,
                 experience,
-                cookingTime
+                cookingTime,
+                extendedSettings
         ) -> {
             session.setActiveType(type);
             session.setSourceInfo(sourceInfo);
@@ -390,16 +452,27 @@ public final class RecipeEditorUi {
                     field.setText(Integer.toString(cookingTime));
                 }
             }
+            session.setExtendedSettings(type, extendedSettings);
+            if (type.isExtendedTable()) {
+                selectedExtendedTable[0] = type;
+                extendedTableSelector.setSelected(extendedTableDisplay.get(type));
+            }
+            extendedTableSelectorRow.setDisplay(type.isExtendedTable());
+            updateNumericField(root, extendedFieldId(type, "power_cost"), extendedSettings.powerCost());
+            updateNumericField(root, extendedFieldId(type, "power_rate"), extendedSettings.powerRate());
+            updateNumericField(root, extendedFieldId(type, "ingredient_count"), extendedSettings.ingredientCount());
+            updateNumericField(root, extendedFieldId(type, "crafting_time"), extendedSettings.craftingTime());
             for (var index = 0; index < type.inputCount(); index++) {
                 session.setInputStack(type, index, ItemStack.EMPTY);
             }
 
-            // JEI 的小尺寸有序配方需要按原始宽高映射回固定的 3x3 编辑网格。
-            if (type == WorkstationType.CRAFTING && shaped && inputs.size() != 9) {
+            // 小尺寸有序配方需要按原始宽高映射回当前工作站的固定编辑网格。
+            if (type.supportsShaped() && shaped && craftingWidth > 0 && craftingHeight > 0
+                    && inputs.size() != type.inputCount()) {
                 for (var index = 0; index < inputs.size() && index < craftingWidth * craftingHeight; index++) {
                     var row = index / Math.max(1, craftingWidth);
                     var column = index % Math.max(1, craftingWidth);
-                    var target = row * 3 + column;
+                    var target = row * type.gridWidth() + column;
                     if (target < type.inputCount()) {
                         session.setInputStack(type, target, inputs.get(index));
                     }
@@ -431,9 +504,9 @@ public final class RecipeEditorUi {
             sourceGroupValue.setText(Component.literal(sourceDisplayValue(sourceInfo.group())));
             main.setDisplay(true);
             title.setText(Component.translatable(type.translationKey()));
-            panels.forEach((panelType, panel) -> panel.setDisplay(panelType == type));
-            workstationButtons.forEach((buttonType, button) -> button.setActive(buttonType != type));
-            modeButton.setDisplay(type == WorkstationType.CRAFTING);
+            showWorkstationPanel(panels, type);
+            updateWorkstationButtons(workstationButtons, type);
+            modeButton.setDisplay(type.supportsShaped());
             modeButton.setText(Component.translatable(shaped
                     ? "kubejs_recipe_ui.action.shaped"
                     : "kubejs_recipe_ui.action.shapeless"));
@@ -462,6 +535,37 @@ public final class RecipeEditorUi {
         );
     }
 
+    /** 只显示当前工作站对应的编辑面板。 */
+    private static void showWorkstationPanel(
+            EnumMap<WorkstationType, UIElement> panels,
+            WorkstationType activeType
+    ) {
+        panels.forEach((type, panel) -> panel.setDisplay(type == activeType));
+    }
+
+    /** 四级扩展工作台共用基础工作台按钮，因此按钮选中状态按工作站族判断。 */
+    private static void updateWorkstationButtons(
+            EnumMap<WorkstationType, Button> buttons,
+            WorkstationType activeType
+    ) {
+        buttons.forEach((type, button) -> {
+            var selected = type == activeType
+                    || type == WorkstationType.EXTENDED_BASIC_TABLE && activeType.isExtendedTable();
+            button.setActive(!selected);
+        });
+    }
+
+    /** @return Extended Crafting 工作台等级下拉框使用的简短翻译键 */
+    private static String extendedTableLevelTranslationKey(WorkstationType type) {
+        return switch (type) {
+            case EXTENDED_BASIC_TABLE -> "kubejs_recipe_ui.extended.table_level.basic";
+            case EXTENDED_ADVANCED_TABLE -> "kubejs_recipe_ui.extended.table_level.advanced";
+            case EXTENDED_ELITE_TABLE -> "kubejs_recipe_ui.extended.table_level.elite";
+            case EXTENDED_ULTIMATE_TABLE -> "kubejs_recipe_ui.extended.table_level.ultimate";
+            default -> throw new IllegalArgumentException("不是 Extended Crafting 工作台类型: " + type);
+        };
+    }
+
     /** 根据工作站类型分派到对应的原版风格面板构建器。 */
     private static UIElement createWorkstationPanel(
             UIElement root,
@@ -475,6 +579,12 @@ public final class RecipeEditorUi {
             case CAMPFIRE -> createCampfirePanel(root, holder, session);
             case STONECUTTER -> createSingleInputPanel(root, holder, session, type);
             case SMITHING -> createSmithingPanel(root, holder, session);
+            case EXTENDED_BASIC_TABLE, EXTENDED_ADVANCED_TABLE, EXTENDED_ELITE_TABLE, EXTENDED_ULTIMATE_TABLE ->
+                    createExtendedTablePanel(root, holder, session, type);
+            case EXTENDED_COMBINATION -> createCombinationPanel(root, holder, session);
+            case EXTENDED_COMPRESSOR -> createCompressorPanel(root, holder, session);
+            case EXTENDED_ENDER_CRAFTER -> createEnderCrafterPanel(root, holder, session);
+            case EXTENDED_FLUX_CRAFTER -> createFluxCrafterPanel(root, holder, session);
         };
     }
 
@@ -485,15 +595,187 @@ public final class RecipeEditorUi {
             RecipeEditorSession session
     ) {
         var panel = workstationRow(14);
-        var grid = new UIElement();
-        grid.layout(style -> style.width(58).height(58).gapAll(2));
-        grid.lss("flex-direction", "row");
-        grid.lss("flex-wrap", "wrap");
-        for (var index = 0; index < 9; index++) {
-            grid.addChild(createInputSlot(root, holder, session, WorkstationType.CRAFTING, index, null));
-        }
+        var grid = createInputGrid(root, holder, session, WorkstationType.CRAFTING, 0, 9, 3, null);
         panel.addChildren(grid, recipeArrow(), createOutputSlot(root, holder, session, WorkstationType.CRAFTING));
         return panel;
+    }
+
+    /** 创建 Extended Crafting 的 3x3、5x5、7x7 或 9x9 工作台网格。 */
+    private static UIElement createExtendedTablePanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type
+    ) {
+        var panel = workstationRow(10);
+        panel.layout(style -> style.widthPercent(100).height(180).gapAll(10));
+        panel.addChildren(
+                createInputGrid(root, holder, session, type, 0, type.inputCount(), type.gridWidth(), null),
+                recipeArrow(),
+                createOutputSlot(root, holder, session, type)
+        );
+        return panel;
+    }
+
+    /** 创建组合合成的中心材料、48 个基座材料以及能量参数。 */
+    private static UIElement createCombinationPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.EXTENDED_COMBINATION;
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(180).gapAll(4));
+        panel.lss("flex-direction", "column");
+
+        var recipe = workstationRow(8);
+        recipe.layout(style -> style.widthPercent(100).height(142).gapAll(8));
+        recipe.addChildren(
+                createInputGrid(root, holder, session, type, 1, 48, 8, "kubejs_recipe_ui.slot.pedestal"),
+                createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.center"),
+                recipeArrow(),
+                createOutputSlot(root, holder, session, type)
+        );
+        panel.addChildren(recipe, createPowerFields(session, type, "kubejs_recipe_ui.extended.power_cost"));
+        return panel;
+    }
+
+    /** 创建压缩机材料、催化剂、数量和能量参数。 */
+    private static UIElement createCompressorPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.EXTENDED_COMPRESSOR;
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(150).gapAll(5));
+        panel.lss("flex-direction", "column");
+
+        var recipe = workstationRow(10);
+        recipe.addChildren(
+                createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.compressor_ingredient"),
+                symbol("+"),
+                createInputSlot(root, holder, session, type, 1, "kubejs_recipe_ui.slot.catalyst"),
+                recipeArrow(),
+                createOutputSlot(root, holder, session, type)
+        );
+
+        var ingredientCount = numericField(
+                Integer.toString(session.getIngredientCount(type)),
+                1,
+                Integer.MAX_VALUE,
+                64
+        );
+        ingredientCount.setId(extendedFieldId(type, "ingredient_count"));
+        ingredientCount.registerValueListener(value -> session.setIngredientCount(type, parseInt(value, 1)));
+        var countRow = labeledField("kubejs_recipe_ui.extended.ingredient_count", ingredientCount);
+        countRow.layout(style -> style.width(125).height(20).marginHorizontalAuto());
+        panel.addChildren(
+                recipe,
+                countRow,
+                createPowerFields(session, type, "kubejs_recipe_ui.extended.power_cost")
+        );
+        return panel;
+    }
+
+    /** 创建末影合成器的 3x3 网格和合成时间。 */
+    private static UIElement createEnderCrafterPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.EXTENDED_ENDER_CRAFTER;
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(115).gapAll(5));
+        panel.lss("flex-direction", "column");
+
+        var recipe = workstationRow(14);
+        recipe.addChildren(
+                createInputGrid(root, holder, session, type, 0, 9, 3, null),
+                recipeArrow(),
+                createOutputSlot(root, holder, session, type)
+        );
+
+        var craftingTime = numericField(
+                Integer.toString(session.getExtendedCraftingTime(type)),
+                1,
+                Integer.MAX_VALUE,
+                64
+        );
+        craftingTime.setId(extendedFieldId(type, "crafting_time"));
+        craftingTime.registerValueListener(value -> session.setExtendedCraftingTime(type, parseInt(value, 60)));
+        var timeRow = labeledField("kubejs_recipe_ui.extended.crafting_time", craftingTime);
+        timeRow.layout(style -> style.width(130).height(20).marginHorizontalAuto());
+        panel.addChildren(recipe, timeRow);
+        return panel;
+    }
+
+    /** 创建通量合成器的 3x3 网格和能量参数。 */
+    private static UIElement createFluxCrafterPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.EXTENDED_FLUX_CRAFTER;
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(115).gapAll(5));
+        panel.lss("flex-direction", "column");
+
+        var recipe = workstationRow(14);
+        recipe.addChildren(
+                createInputGrid(root, holder, session, type, 0, 9, 3, null),
+                recipeArrow(),
+                createOutputSlot(root, holder, session, type)
+        );
+        panel.addChildren(recipe, createPowerFields(session, type, "kubejs_recipe_ui.extended.power_required"));
+        return panel;
+    }
+
+    /** 创建可复用的紧凑物品槽网格。 */
+    private static UIElement createInputGrid(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type,
+            int startIndex,
+            int count,
+            int columns,
+            String tooltipKey
+    ) {
+        var rows = (count + columns - 1) / columns;
+        var grid = new UIElement();
+        grid.layout(style -> style.width(columns * 20 - 2).height(rows * 20 - 2).gapAll(2));
+        grid.lss("flex-direction", "row");
+        grid.lss("flex-wrap", "wrap");
+        for (var index = 0; index < count; index++) {
+            grid.addChild(createInputSlot(root, holder, session, type, startIndex + index, tooltipKey));
+        }
+        return grid;
+    }
+
+    /** 创建总能量和每 tick 功率两个字段。 */
+    private static UIElement createPowerFields(
+            RecipeEditorSession session,
+            WorkstationType type,
+            String powerCostTranslationKey
+    ) {
+        var powerCost = numericField(Integer.toString(session.getPowerCost(type)), 0, Integer.MAX_VALUE, 64);
+        powerCost.setId(extendedFieldId(type, "power_cost"));
+        powerCost.registerValueListener(value -> session.setPowerCost(type, parseInt(value, 0)));
+        var powerRate = numericField(Integer.toString(session.getPowerRate(type)), 0, Integer.MAX_VALUE, 64);
+        powerRate.setId(extendedFieldId(type, "power_rate"));
+        powerRate.registerValueListener(value -> session.setPowerRate(type, parseInt(value, 0)));
+
+        var values = new UIElement();
+        values.layout(style -> style.width(250).height(22).gapAll(5).marginHorizontalAuto());
+        values.lss("flex-direction", "row");
+        values.lss("justify-content", "center");
+        var costRow = labeledField(powerCostTranslationKey, powerCost);
+        costRow.layout(style -> style.width(122).height(20));
+        var rateRow = labeledField("kubejs_recipe_ui.extended.power_rate", powerRate);
+        rateRow.layout(style -> style.width(122).height(20));
+        values.addChildren(costRow, rateRow);
+        return values;
     }
 
     /** 创建熔炉类面板，包括输入、燃料预览、输出、经验和烹饪时间。 */
@@ -785,6 +1067,22 @@ public final class RecipeEditorUi {
         return "kubejs_recipe_ui#cooking_time_" + type.name().toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** 生成 Extended Crafting 数值字段在 JEI 回填时使用的稳定元素 ID。 */
+    private static String extendedFieldId(WorkstationType type, String fieldName) {
+        return "kubejs_recipe_ui#extended_"
+                + type.name().toLowerCase(java.util.Locale.ROOT)
+                + "_"
+                + fieldName;
+    }
+
+    /** JEI 回填时同步修改已经挂载到 ModularUI 的整数输入框。 */
+    private static void updateNumericField(UIElement root, String id, int value) {
+        var element = root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
+        if (element instanceof TextField field) {
+            field.setText(Integer.toString(value));
+        }
+    }
+
     /** 创建紧凑的配方符号标签。 */
     private static Label symbol(String text) {
         var label = new Label();
@@ -793,8 +1091,8 @@ public final class RecipeEditorUi {
         return label;
     }
 
-    /** 将翻译标签和输入框组合成固定高度的一行。 */
-    private static UIElement labeledField(String key, TextField field) {
+    /** 将翻译标签和输入控件组合成固定高度的一行。 */
+    private static UIElement labeledField(String key, UIElement field) {
         var row = new UIElement();
         row.layout(style -> style.widthPercent(100).height(20).gapAll(3));
         row.lss("flex-direction", "row");

@@ -1,6 +1,7 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
+import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import net.minecraft.world.item.ItemStack;
@@ -34,9 +35,21 @@ public final class RecipeEditorJeiBridge extends UIElement {
             int craftingWidth,
             int craftingHeight,
             float experience,
-            int cookingTime
+            int cookingTime,
+            ExtendedRecipeSettings extendedSettings
     ) {
-        transferConsumer.accept(type, inputs, output, sourceInfo, shaped, craftingWidth, craftingHeight, experience, cookingTime);
+        transferConsumer.accept(
+                type,
+                inputs,
+                output,
+                sourceInfo,
+                shaped,
+                craftingWidth,
+                craftingHeight,
+                experience,
+                cookingTime,
+                extendedSettings
+        );
     }
 
     /** 描述 JEI 配方转移到编辑器所需的全部字段。 */
@@ -51,7 +64,8 @@ public final class RecipeEditorJeiBridge extends UIElement {
                 int craftingWidth,
                 int craftingHeight,
                 float experience,
-                int cookingTime
+                int cookingTime,
+                ExtendedRecipeSettings extendedSettings
         );
     }
 }
