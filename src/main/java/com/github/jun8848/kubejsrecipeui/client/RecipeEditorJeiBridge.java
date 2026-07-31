@@ -1,5 +1,6 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
+import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
@@ -36,7 +37,8 @@ public final class RecipeEditorJeiBridge extends UIElement {
             int craftingHeight,
             float experience,
             int cookingTime,
-            ExtendedRecipeSettings extendedSettings
+            ExtendedRecipeSettings extendedSettings,
+            Ae2RecipeSettings ae2Settings
     ) {
         transferConsumer.accept(
                 type,
@@ -48,7 +50,8 @@ public final class RecipeEditorJeiBridge extends UIElement {
                 craftingHeight,
                 experience,
                 cookingTime,
-                extendedSettings
+                extendedSettings,
+                ae2Settings
         );
     }
 
@@ -65,7 +68,8 @@ public final class RecipeEditorJeiBridge extends UIElement {
                 int craftingHeight,
                 float experience,
                 int cookingTime,
-                ExtendedRecipeSettings extendedSettings
+                ExtendedRecipeSettings extendedSettings,
+                Ae2RecipeSettings ae2Settings
         );
     }
 }

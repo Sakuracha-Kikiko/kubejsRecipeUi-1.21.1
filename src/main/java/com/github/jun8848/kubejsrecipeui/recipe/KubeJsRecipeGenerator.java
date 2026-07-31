@@ -36,6 +36,10 @@ public final class KubeJsRecipeGenerator {
             case EXTENDED_COMPRESSOR -> generateCompressor(recipe);
             case EXTENDED_ENDER_CRAFTER -> generateEnderCrafter(recipe);
             case EXTENDED_FLUX_CRAFTER -> generateFluxCrafter(recipe);
+            case AE2_CHARGER -> generateAe2Charger(recipe);
+            case AE2_INSCRIBER -> generateAe2Inscriber(recipe);
+            case AE2_TRANSFORM -> generateAe2Transform(recipe);
+            case AE2_ENTROPY -> generateAe2Entropy(recipe);
         };
         if (mode == RecipeWriteMode.REMOVE_AND_ADD) {
             body = generateRemoveBody(deleteMode, deleteValue) + "\n" + body;
@@ -175,6 +179,70 @@ public final class KubeJsRecipeGenerator {
                 ? "extendedcrafting:shaped_flux_crafter"
                 : "extendedcrafting:shapeless_flux_crafter";
         return customRecipe(serializer, fields, recipe);
+    }
+
+    /** 生成 AE2 充能器的单输入配方。 */
+    private static String generateAe2Charger(RecipeDefinition recipe) {
+        var fields = List.of(
+                "    ingredient: " + ingredientJsonExpression(recipe.inputs().getFirst()),
+                resultField(recipe.output())
+        );
+        return customRecipe("ae2:charger", fields, recipe);
+    }
+
+    /** 生成 AE2 压印器配方，并省略未使用的上、下压印槽。 */
+    private static String generateAe2Inscriber(RecipeDefinition recipe) {
+        var ingredientFields = new ArrayList<String>();
+        if (recipe.inputs().get(0) != null) {
+            ingredientFields.add("      top: " + ingredientJsonExpression(recipe.inputs().get(0)));
+        }
+        ingredientFields.add("      middle: " + ingredientJsonExpression(recipe.inputs().get(1)));
+        if (recipe.inputs().get(2) != null) {
+            ingredientFields.add("      bottom: " + ingredientJsonExpression(recipe.inputs().get(2)));
+        }
+
+        var fields = List.of(
+                "    ingredients: {\n" + String.join(",\n", ingredientFields) + "\n    }",
+                "    mode: " + quote(recipe.ae2Settings().inscriberMode().serializedName()),
+                resultField(recipe.output())
+        );
+        return customRecipe("ae2:inscriber", fields, recipe);
+    }
+
+    /** 生成 AE2 地面物品转化配方及爆炸或流体条件。 */
+    private static String generateAe2Transform(RecipeDefinition recipe) {
+        var settings = recipe.ae2Settings();
+        var circumstance = settings.transformCondition() == Ae2RecipeSettings.TransformCondition.EXPLOSION
+                ? "    circumstance: { type: " + quote("explosion") + " }"
+                : "    circumstance: { type: " + quote("fluid") + ", tag: "
+                + quote(settings.transformFluidTag()) + " }";
+        var fields = List.of(
+                ingredientListField("ingredients", nonEmptyInputs(recipe)),
+                circumstance,
+                resultField(recipe.output())
+        );
+        return customRecipe("ae2:transform", fields, recipe);
+    }
+
+    /** 生成 AE2 熵变处理配方，输入和输出可分别选择方块、流体或掉落物。 */
+    private static String generateAe2Entropy(RecipeDefinition recipe) {
+        var settings = recipe.ae2Settings();
+        var input = "    input: {\n"
+                + "      " + settings.entropyInputType().serializedName() + ": { id: "
+                + quote(settings.entropyInputId()) + " }\n"
+                + "    }";
+        var outputValue = settings.entropyOutputType() == Ae2RecipeSettings.EntropyOutputType.DROPS
+                ? "[{ id: " + quote(settings.entropyOutputId()) + " }]"
+                : "{ id: " + quote(settings.entropyOutputId()) + " }";
+        var output = "    output: {\n"
+                + "      " + settings.entropyOutputType().serializedName() + ": " + outputValue + "\n"
+                + "    }";
+        var fields = List.of(
+                input,
+                "    mode: " + quote(settings.entropyMode().serializedName()),
+                output
+        );
+        return customRecipe("ae2:entropy", fields, recipe);
     }
 
     private static String customRecipe(String serializer, List<String> fields, RecipeDefinition recipe) {

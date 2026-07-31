@@ -102,6 +102,11 @@ dependencies {
         // Jade 只是上游的可选显示集成，编辑器开发环境不需要下载 CurseMaven 文件。
         exclude group: 'curse.maven', module: 'jade-324717'
     }
+
+    // AE2 及其必需的 GuideME 只用于开发客户端测试，不作为本模组的发布依赖。
+    compileOnly "maven.modrinth:ae2:${ae2_version}"
+    localRuntime "maven.modrinth:guideme:${guideme_version}"
+    localRuntime "maven.modrinth:ae2:${ae2_version}"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -111,6 +116,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             jei_version_range      : jei_version_range,
             ldlib2_version_range   : ldlib2_version_range,
             extended_crafting_version_range: extended_crafting_version_range,
+            ae2_version_range      : ae2_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,

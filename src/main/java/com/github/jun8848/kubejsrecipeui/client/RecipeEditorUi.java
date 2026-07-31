@@ -1,5 +1,6 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
+import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.KubeJsRecipeGenerator;
@@ -14,6 +15,7 @@ import com.lowdragmc.lowdraglib2.gui.sync.bindings.impl.DataBindingBuilder;
 import com.lowdragmc.lowdraglib2.gui.sync.rpc.RPCEventBuilder;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.texture.ItemStackTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
 import com.lowdragmc.lowdraglib2.gui.ui.UI;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
@@ -37,11 +39,13 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.inventory.InventorySlots;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.style.StylesheetManager;
 import dev.vfyjxf.taffy.style.TaffyPosition;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
@@ -57,6 +61,7 @@ import java.util.HashMap;
 public final class RecipeEditorUi {
     private static final float SLOT_SIZE = 18.0F;
     private static final Identifier MINECRAFT_FONT = Identifier.withDefaultNamespace("default");
+    private static final Identifier AE2_JEI_TEXTURE = Identifier.fromNamespaceAndPath("ae2", "textures/guis/jei.png");
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private RecipeEditorUi() {
@@ -70,14 +75,16 @@ public final class RecipeEditorUi {
         var availableTypes = WorkstationType.availableValues();
         var sidebarTypes = availableTypes.stream()
                 .filter(type -> !type.isExtendedTable() || type == WorkstationType.EXTENDED_BASIC_TABLE)
+                .filter(type -> !type.isAe2() || type == WorkstationType.AE2_CHARGER)
                 .toList();
         var root = new UIElement();
         root.layout(style -> style
-                .width(560)
-                .height(420)
+                .width(600)
+                .height(360)
                 .gapAll(4)
         );
         root.lss("flex-direction", "column");
+        root.addClass("kru_root");
 
         var header = new UIElement();
         header.layout(style -> style
@@ -87,12 +94,13 @@ public final class RecipeEditorUi {
         );
         header.lss("flex-direction", "row");
         header.lss("align-items", "center");
-        header.addClass("panel_bg");
+        header.addClass("kru_header");
 
         var title = new Label();
         title.setText(Component.translatable(WorkstationType.CRAFTING.translationKey()));
         title.textStyle(style -> style.textAlignHorizontal(Horizontal.CENTER));
         title.layout(style -> style.widthPercent(100).height(16));
+        title.addClass("kru_header_title");
         header.addChild(title);
 
         var contentBody = new UIElement();
@@ -102,17 +110,18 @@ public final class RecipeEditorUi {
                 .gapAll(4)
         );
         contentBody.lss("flex-direction", "row");
+        contentBody.addClass("kru_content_body");
 
         var sidebar = new UIElement();
         sidebar.layout(style -> style
-                .width(36)
+                .width(34)
                 .heightPercent(100)
-                .paddingAll(6)
-                .gapAll(5)
+                .paddingAll(5)
+                .gapAll(4)
         );
         sidebar.lss("flex-direction", "column");
         sidebar.lss("align-items", "center");
-        sidebar.addClass("panel_bg");
+        sidebar.addClass("kru_sidebar");
 
         var main = new UIElement();
         main.layout(style -> style
@@ -120,17 +129,18 @@ public final class RecipeEditorUi {
                 .heightPercent(100)
         );
         main.lss("flex-direction", "column");
-        main.addClass("panel_bg");
+        main.addClass("kru_main");
 
         var recipeCanvas = new UIElement();
         recipeCanvas.layout(style -> style
                 .widthPercent(100)
                 .heightPercent(100)
-                .paddingAll(8)
+                .paddingAll(4)
                 .gapAll(5)
         );
         recipeCanvas.lss("flex-direction", "column");
-        recipeCanvas.addClass("panel_bg");
+        recipeCanvas.lss("justify-content", "center");
+        recipeCanvas.addClass("kru_recipe_canvas");
 
         var inspectorContent = new UIElement();
         inspectorContent.layout(style -> style
@@ -139,9 +149,11 @@ public final class RecipeEditorUi {
                 .gapAll(5)
         );
         inspectorContent.lss("flex-direction", "column");
+        inspectorContent.addClass("kru_inspector_content");
 
         var inspector = new ScrollerView();
         inspector.layout(style -> style.widthPercent(100).heightPercent(100));
+        inspector.addClass("kru_inspector");
         inspector.viewContainer(element -> {
             element.layout(style -> style.widthPercent(100));
             element.lss("flex-direction", "column");
@@ -160,7 +172,6 @@ public final class RecipeEditorUi {
         var inputComponents = componentSwitch("kubejs_recipe_ui.recipe_components.input", true);
         var outputComponents = componentSwitch("kubejs_recipe_ui.recipe_components.output", true);
         inspectorContent.addChildren(
-                editorSectionLabel("kubejs_recipe_ui.editor.inspector.recipe"),
                 writeModeButton,
                 switchOptionRow("kubejs_recipe_ui.recipe_components.input", inputComponents),
                 switchOptionRow("kubejs_recipe_ui.recipe_components.output", outputComponents)
@@ -191,6 +202,32 @@ public final class RecipeEditorUi {
         extendedTableSelectorRow.layout(style -> style.widthPercent(100).height(20));
         extendedTableSelectorRow.setDisplay(false);
         inspectorContent.addChild(extendedTableSelectorRow);
+
+        // 四类 AE2 配方共用一个侧栏入口，类型下拉框负责切换各自独立的编辑状态。
+        var ae2TypeByDisplay = new HashMap<String, WorkstationType>();
+        var ae2TypeDisplay = new EnumMap<WorkstationType, String>(WorkstationType.class);
+        var ae2TypeCandidates = availableTypes.stream()
+                .filter(WorkstationType::isAe2)
+                .map(type -> {
+                    var display = translate(type.translationKey());
+                    ae2TypeByDisplay.put(display, type);
+                    ae2TypeDisplay.put(type, display);
+                    return display;
+                })
+                .toList();
+        var selectedAe2Type = new WorkstationType[]{WorkstationType.AE2_CHARGER};
+        var ae2TypeSelector = new Selector<String>();
+        ae2TypeSelector.dialog.style(style -> style.zIndex(200));
+        ae2TypeSelector.setCandidates(ae2TypeCandidates);
+        if (!ae2TypeCandidates.isEmpty()) {
+            ae2TypeSelector.setSelected(ae2TypeCandidates.getFirst());
+        }
+        ae2TypeSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
+        ae2TypeSelector.layout(style -> style.width(115).height(20));
+        var ae2TypeSelectorRow = labeledField("kubejs_recipe_ui.ae2.recipe_type", ae2TypeSelector);
+        ae2TypeSelectorRow.layout(style -> style.widthPercent(100).height(20));
+        ae2TypeSelectorRow.setDisplay(false);
+        inspectorContent.addChild(ae2TypeSelectorRow);
 
         // Selector 返回显示文本，通过映射恢复实际删除枚举。
         var deleteModeByDisplay = new HashMap<String, RecipeDeleteMode>();
@@ -265,15 +302,6 @@ public final class RecipeEditorUi {
         codePreview.setValue(new String[0], false);
         codePreview.layout(style -> style.widthPercent(100).heightPercent(100));
 
-        captureClick(previewButton, "生成代码预览", event -> generateRecipe(
-                session,
-                writeMode[0],
-                deleteMode[0],
-                inputComponents.isOn(),
-                outputComponents.isOn(),
-                code -> codePreview.setValue(code.split("\\R", -1), false)
-        ));
-
         var writeButton = actionButton(Component.translatable("kubejs_recipe_ui.action.write"), 74);
         writeButton.addPreIcon(Icons.SAVE);
         writeButton.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.tooltip.write")));
@@ -310,8 +338,10 @@ public final class RecipeEditorUi {
         );
 
         var editorArea = new UIElement();
-        editorArea.layout(style -> style.widthPercent(100).height(182));
+        editorArea.layout(style -> style.widthPercent(100).height(190));
         editorArea.lss("flex-direction", "column");
+        editorArea.lss("justify-content", "center");
+        editorArea.addClass("kru_recipe_frame");
         // 所有工作站面板只创建一次，侧边栏切换时仅改变可见性以保留控件状态。
         var panels = new EnumMap<WorkstationType, UIElement>(WorkstationType.class);
         for (var type : availableTypes) {
@@ -320,16 +350,20 @@ public final class RecipeEditorUi {
             panels.put(type, panel);
             editorArea.addChild(panel);
         }
-        recipeCanvas.addChild(editorArea);
-
         var inventoryLabel = new Label();
         inventoryLabel.setText(Component.translatable("container.inventory"));
         inventoryLabel.layout(style -> style.height(11).marginTop(1));
-        recipeCanvas.addChild(inventoryLabel);
+        inventoryLabel.addClass("kru_inventory_label");
 
         var inventorySlots = new InventorySlots();
-        inventorySlots.layout(style -> style.marginHorizontalAuto());
-        recipeCanvas.addChild(inventorySlots);
+        inventorySlots.layout(style -> style.width(162).height(77).marginHorizontalAuto());
+
+        var inventoryArea = new UIElement();
+        inventoryArea.layout(style -> style.widthPercent(100).height(97).paddingHorizontal(4).paddingVertical(3).gapAll(2));
+        inventoryArea.lss("flex-direction", "column");
+        inventoryArea.addClass("kru_inventory_frame");
+        inventoryArea.addChildren(inventoryLabel, inventorySlots);
+        recipeCanvas.addChildren(editorArea, inventoryArea);
 
         var sourceContent = new UIElement();
         sourceContent.layout(style -> style
@@ -339,6 +373,7 @@ public final class RecipeEditorUi {
                 .gapAll(3)
         );
         sourceContent.lss("flex-direction", "column");
+        sourceContent.addClass("kru_source_content");
         sourceContent.addChildren(
                 sourceInfoRow("kubejs_recipe_ui.editor.source.id", sourceIdValue),
                 sourceInfoRow("kubejs_recipe_ui.editor.source.type", sourceTypeValue),
@@ -348,43 +383,71 @@ public final class RecipeEditorUi {
 
         var codeContent = new UIElement();
         codeContent.layout(style -> style.widthPercent(100).heightPercent(100).paddingAll(4));
+        codeContent.addClass("kru_code_content");
         codeContent.addChild(codePreview);
 
-        var bottomTabs = new TabView();
-        bottomTabs.layout(style -> style.widthPercent(100).heightPercent(100));
-        bottomTabs.addTab(
-                new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.tab.code")),
+        var propertiesTab = new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.inspector.recipe"));
+        var codeTab = new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.tab.code"));
+        var sourceTab = new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.tab.source"));
+        var inspectorTabs = new TabView();
+        inspectorTabs.layout(style -> style.widthPercent(100).heightPercent(100));
+        inspectorTabs.addClass("kru_inspector_tabs");
+        inspectorTabs.addTab(propertiesTab, inspector);
+        inspectorTabs.addTab(
+                codeTab,
                 codeContent
         );
-        bottomTabs.addTab(
-                new Tab().setText(Component.translatable("kubejs_recipe_ui.editor.tab.source")),
+        inspectorTabs.addTab(
+                sourceTab,
                 sourceContent
         );
+        inspectorTabs.selectTab(propertiesTab);
+
+        // 代码生成成功后自动切换到预览模式，属性、预览和来源共用完整右栏空间。
+        captureClick(previewButton, "生成代码预览", event -> generateRecipe(
+                session,
+                writeMode[0],
+                deleteMode[0],
+                inputComponents.isOn(),
+                outputComponents.isOn(),
+                code -> {
+                    codePreview.setValue(code.split("\\R", -1), false);
+                    inspectorTabs.selectTab(codeTab);
+                }
+        ));
 
         var workspaceSplit = new SplitView.Horizontal();
-        workspaceSplit.setPercentage(66).left(recipeCanvas).right(inspector);
+        workspaceSplit.setPercentage(64).left(recipeCanvas).right(inspectorTabs);
         workspaceSplit.layout(style -> style.widthPercent(100).heightPercent(100));
-
-        var editorSplit = new SplitView.Vertical();
-        editorSplit.setPercentage(78).top(workspaceSplit).bottom(bottomTabs);
-        editorSplit.layout(style -> style.widthPercent(100).heightPercent(100));
-        main.addChild(editorSplit);
+        workspaceSplit.addClass("kru_workspace_split");
+        main.addChild(workspaceSplit);
 
         var workstationButtons = new EnumMap<WorkstationType, Button>(WorkstationType.class);
         for (var type : sidebarTypes) {
             var button = new Button();
-            button.setText("");
-            button.addPreIcon(new ItemStackTexture(type.icon()));
+            button.noText();
             button.layout(style -> style.width(20).height(20));
+            button.lss("align-items", "center");
+            button.lss("justify-content", "center");
+            button.addClass("kru_sidebar_button");
+            var icon = new UIElement();
+            icon.layout(style -> style.width(16).height(16));
+            icon.style(style -> style.background(new ItemStackTexture(type.icon())));
+            icon.addClass("kru_sidebar_icon");
+            button.addChild(icon);
             button.style(style -> style.tooltips(Component.translatable(
                     type == WorkstationType.EXTENDED_BASIC_TABLE
                             ? "kubejs_recipe_ui.workstation.extended_table"
+                            : type == WorkstationType.AE2_CHARGER
+                            ? "kubejs_recipe_ui.workstation.ae2"
                             : type.translationKey()
             )));
             button.setActive(type != WorkstationType.CRAFTING);
             captureClick(button, "切换工作方块: " + type, event -> {
                 var targetType = type == WorkstationType.EXTENDED_BASIC_TABLE
                         ? selectedExtendedTable[0]
+                        : type == WorkstationType.AE2_CHARGER
+                        ? selectedAe2Type[0]
                         : type;
                 main.setDisplay(true);
                 session.setActiveType(targetType);
@@ -392,8 +455,12 @@ public final class RecipeEditorUi {
                 showWorkstationPanel(panels, targetType);
                 updateWorkstationButtons(workstationButtons, targetType);
                 extendedTableSelectorRow.setDisplay(targetType.isExtendedTable());
+                ae2TypeSelectorRow.setDisplay(targetType.isAe2());
                 if (targetType.isExtendedTable()) {
                     extendedTableSelector.setSelected(extendedTableDisplay.get(targetType));
+                }
+                if (targetType.isAe2()) {
+                    ae2TypeSelector.setSelected(ae2TypeDisplay.get(targetType));
                 }
                 modeButton.setDisplay(targetType.supportsShaped());
                 modeButton.setText(Component.translatable(session.isShaped()
@@ -420,6 +487,19 @@ public final class RecipeEditorUi {
                     : "kubejs_recipe_ui.action.shapeless"));
         });
 
+        ae2TypeSelector.setOnValueChanged(value -> {
+            var type = ae2TypeByDisplay.get(value);
+            if (type == null) {
+                return;
+            }
+            selectedAe2Type[0] = type;
+            session.setActiveType(type);
+            title.setText(Component.translatable(type.translationKey()));
+            showWorkstationPanel(panels, type);
+            updateWorkstationButtons(workstationButtons, type);
+            modeButton.setDisplay(false);
+        });
+
         // JEI 转移回调同时更新会话和已经挂载的槽位控件。
         var jeiBridge = new RecipeEditorJeiBridge((
                 type,
@@ -431,7 +511,8 @@ public final class RecipeEditorUi {
                 craftingHeight,
                 experience,
                 cookingTime,
-                extendedSettings
+                extendedSettings,
+                ae2Settings
         ) -> {
             session.setActiveType(type);
             session.setSourceInfo(sourceInfo);
@@ -453,11 +534,18 @@ public final class RecipeEditorUi {
                 }
             }
             session.setExtendedSettings(type, extendedSettings);
+            session.setAe2Settings(type, ae2Settings);
             if (type.isExtendedTable()) {
                 selectedExtendedTable[0] = type;
                 extendedTableSelector.setSelected(extendedTableDisplay.get(type));
             }
             extendedTableSelectorRow.setDisplay(type.isExtendedTable());
+            if (type.isAe2()) {
+                selectedAe2Type[0] = type;
+                ae2TypeSelector.setSelected(ae2TypeDisplay.get(type));
+                updateAe2Fields(root, type, ae2Settings);
+            }
+            ae2TypeSelectorRow.setDisplay(type.isAe2());
             updateNumericField(root, extendedFieldId(type, "power_cost"), extendedSettings.powerCost());
             updateNumericField(root, extendedFieldId(type, "power_rate"), extendedSettings.powerRate());
             updateNumericField(root, extendedFieldId(type, "ingredient_count"), extendedSettings.ingredientCount());
@@ -518,7 +606,7 @@ public final class RecipeEditorUi {
         contentBody.addChildren(sidebar, main);
         root.addChildren(header, contentBody);
 
-        // MODERN 主题默认使用仅含拉丁字形的 JetBrains Mono；覆盖字体以正确显示中文翻译。
+        // 使用原版 JEI 风格的浅灰面板、斜边框和高对比控件，同时统一使用原版字体显示中文。
         root.addLocalStylesheet("""
                 text, label,
                 text-field:host,
@@ -526,11 +614,129 @@ public final class RecipeEditorUi {
                 .__tag-field_text-field__,
                 .__search-component_text-field__ {
                   font: minecraft:default;
+                  text-color: #3f3f3f;
+                  text-shadow: false;
+                }
+
+                .kru_root {
+                  background: built-in(ui-mc:RECT);
+                  padding-all: 6;
+                  gap-all: 4;
+                }
+
+                .kru_header {
+                  background: sdf(#ffaaaaaa, 0, 1, #ff555555);
+                  padding-vertical: 3;
+                  padding-horizontal: 8;
+                }
+
+                .kru_header_title {
+                  text-color: #ffffff;
+                  text-shadow: true;
+                }
+
+                .kru_sidebar {
+                  background: built-in(ui-mc:RECT_THIN);
+                  padding-all: 5;
+                  gap-all: 4;
+                }
+
+                .kru_main {
+                  background: built-in(ui-mc:RECT_THIN);
+                  padding-all: 3;
+                }
+
+                .kru_recipe_canvas {
+                  background: built-in(ui-mc:RECT);
+                  padding-all: 4;
+                  gap-all: 5;
+                }
+
+                .kru_recipe_frame {
+                  background: built-in(ui-mc:RECT);
+                  padding-all: 5;
+                }
+
+                .kru_inventory_frame {
+                  background: built-in(ui-mc:RECT_THIN);
+                  padding-horizontal: 4;
+                  padding-vertical: 3;
+                  gap-all: 2;
+                }
+
+                .kru_inspector .__scroller_view_view-port__ {
+                  background: built-in(ui-mc:RECT);
+                  padding-all: 2;
+                }
+
+                .kru_inspector_content {
+                  padding-all: 6;
+                  gap-all: 5;
+                }
+
+                .kru_section_label {
+                  background: sdf(#ffd0d0d0, 0, 1, #ff8b8b8b);
+                  padding-horizontal: 4;
+                  text-color: #3f3f3f;
+                }
+
+                .kru_sidebar_button {
+                  padding-all: 2;
+                }
+
+                .kru_sidebar_icon {
+                  width: 16;
+                  height: 16;
+                }
+
+                .kru_inspector_tabs .__tab-view_tab_header_container__ {
+                  background: built-in(ui-mc:RECT_THIN);
+                  padding-horizontal: 3;
+                }
+
+                .kru_inspector_tabs .__tab-view_tab_content_container__,
+                .kru_source_content,
+                .kru_code_content {
+                  background: built-in(ui-mc:RECT);
+                }
+
+                .kru_source_row {
+                  background: built-in(ui-mc:RECT_THIN);
+                  padding-horizontal: 4;
+                }
+
+                .kru_jei_canvas {
+                  background: built-in(ui-mc:RECT);
+                }
+
+                button:host {
+                  padding-all: 3;
+                }
+
+                text-field:host,
+                selector:host,
+                .__tag-field_text-field__,
+                .__search-component_text-field__ {
+                  background: sdf(#fff0f0f0, 1, 1, #ff6b6b6b);
+                  focus-overlay: sdf(#00000000, 1, 1, #ffffffff);
+                }
+
+                .__selector_dialog__,
+                .__search-component_dialog__ {
+                  background: built-in(ui-mc:RECT);
+                }
+
+                .__text-area_content-view__ {
+                  background: sdf(#fff3f3f3, 1, 1, #ff777777);
+                }
+
+                item-slot, .item-slot_bg {
+                  background: built-in(ui-mc:RECT_1);
                 }
                 """);
 
         return new ModularUI(
-                UI.of(root, StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MODERN)),
+                UI.of(root, StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MC)),
                 holder.player
         );
     }
@@ -543,14 +749,15 @@ public final class RecipeEditorUi {
         panels.forEach((type, panel) -> panel.setDisplay(type == activeType));
     }
 
-    /** 四级扩展工作台共用基础工作台按钮，因此按钮选中状态按工作站族判断。 */
+    /** 可选模组的同族工作站共用一个侧栏按钮，因此选中状态按工作站族判断。 */
     private static void updateWorkstationButtons(
             EnumMap<WorkstationType, Button> buttons,
             WorkstationType activeType
     ) {
         buttons.forEach((type, button) -> {
             var selected = type == activeType
-                    || type == WorkstationType.EXTENDED_BASIC_TABLE && activeType.isExtendedTable();
+                    || type == WorkstationType.EXTENDED_BASIC_TABLE && activeType.isExtendedTable()
+                    || type == WorkstationType.AE2_CHARGER && activeType.isAe2();
             button.setActive(!selected);
         });
     }
@@ -585,6 +792,10 @@ public final class RecipeEditorUi {
             case EXTENDED_COMPRESSOR -> createCompressorPanel(root, holder, session);
             case EXTENDED_ENDER_CRAFTER -> createEnderCrafterPanel(root, holder, session);
             case EXTENDED_FLUX_CRAFTER -> createFluxCrafterPanel(root, holder, session);
+            case AE2_CHARGER -> createAe2ChargerPanel(root, holder, session);
+            case AE2_INSCRIBER -> createAe2InscriberPanel(root, holder, session);
+            case AE2_TRANSFORM -> createAe2TransformPanel(root, holder, session);
+            case AE2_ENTROPY -> createAe2EntropyPanel(session);
         };
     }
 
@@ -731,6 +942,473 @@ public final class RecipeEditorUi {
         return panel;
     }
 
+    /** 完整复刻 AE2 充能器 JEI 分类的 130x50 布局。 */
+    private static UIElement createAe2ChargerPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.AE2_CHARGER;
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(86).paddingTop(16));
+        panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
+
+        var jei = ae2JeiCanvas(130, 50);
+        var input = createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.ingredient");
+        input.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(31).top(8));
+        var arrow = ae2JeiSprite(0, 17, 24, 17);
+        arrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(52).top(8));
+        var output = createOutputSlot(root, holder, session, type);
+        output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(81).top(8));
+        var crank = ae2JeiItemSlot(null, optionalItemStack("ae2:crank"));
+        crank.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(3).top(30));
+        crank.style(style -> style.tooltips(Component.translatable("block.ae2.crank")));
+        var power = new Label();
+        power.setText("10 AE/t");
+        power.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(20)
+                .top(35)
+                .width(48)
+                .height(10));
+        jei.addChildren(input, arrow, output, crank, power);
+        panel.addChild(jei);
+        return panel;
+    }
+
+    /** 复刻 AE2 压印器 JEI 分类，并将编辑器专用模式控件放在分类下方。 */
+    private static UIElement createAe2InscriberPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.AE2_INSCRIBER;
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(104).paddingTop(5).gapAll(5));
+        panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
+
+        var jei = ae2JeiCanvas(97, 64);
+        var machineBackground = ae2JeiSprite(24, 0, 48, 64);
+        machineBackground.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(16).top(0));
+        var top = createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.ae2.slot.top");
+        top.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(1).top(1));
+        var middle = createInputSlot(root, holder, session, type, 1, "kubejs_recipe_ui.ae2.slot.middle");
+        middle.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(22).top(24));
+        var bottom = createInputSlot(root, holder, session, type, 2, "kubejs_recipe_ui.ae2.slot.bottom");
+        bottom.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(1).top(47));
+        var output = createOutputSlot(root, holder, session, type);
+        output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(69).top(24));
+        var progress = ae2JeiSprite(72, 0, 6, 18);
+        progress.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(91).top(23));
+        jei.addChildren(machineBackground, top, middle, bottom, output, progress);
+
+        var settings = session.getAe2Settings(type);
+        var mode = translatedSelector(
+                Ae2RecipeSettings.InscriberMode.values(),
+                settings.inscriberMode(),
+                Ae2RecipeSettings.InscriberMode::translationKey,
+                value -> session.setAe2Settings(type, session.getAe2Settings(type).withInscriberMode(value))
+        );
+        mode.setId(ae2FieldId(type, "inscriber_mode"));
+        var modeRow = labeledField("kubejs_recipe_ui.ae2.inscriber_mode", mode);
+        modeRow.layout(style -> style.width(170).height(20).marginHorizontalAuto());
+        panel.addChildren(jei, modeRow);
+        return panel;
+    }
+
+    /** 复刻 AE2 物品转化 JEI 分类，并在分类下方提供条件参数。 */
+    private static UIElement createAe2TransformPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session
+    ) {
+        var type = WorkstationType.AE2_TRANSFORM;
+        var settings = session.getAe2Settings(type);
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(136).paddingTop(2).gapAll(5));
+        panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
+
+        var jei = ae2JeiCanvas(130, 62);
+        for (var row = 0; row < 3; row++) {
+            var index = row;
+            var slot = createInputSlot(
+                    root,
+                    holder,
+                    session,
+                    type,
+                    index,
+                    "kubejs_recipe_ui.slot.ingredient"
+            );
+            var top = 6 + row * 18;
+            slot.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(6).top(top));
+            jei.addChild(slot);
+        }
+        var firstArrow = ae2JeiSprite(0, 17, 24, 17);
+        firstArrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(25).top(23));
+        var conditionPreview = ae2JeiItemSlot(
+                ae2FieldId(type, "transform_condition_preview"),
+                ae2TransformPreviewStacks(settings)
+        );
+        conditionPreview.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(56).top(24));
+        var secondArrow = ae2JeiSprite(0, 17, 24, 17);
+        secondArrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(76).top(23));
+        var output = createOutputSlot(root, holder, session, type);
+        output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(106).top(24));
+        var conditionLabel = new Label();
+        conditionLabel.setId(ae2FieldId(type, "transform_condition_label"));
+        conditionLabel.setText(Component.translatable(transformPreviewTranslationKey(settings.transformCondition())));
+        conditionLabel.textStyle(style -> style.textAlignHorizontal(Horizontal.CENTER));
+        conditionLabel.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(35)
+                .top(9)
+                .width(60)
+                .height(10));
+        jei.addChildren(firstArrow, conditionPreview, secondArrow, output, conditionLabel);
+
+        var fluidTag = resourceIdField(settings.transformFluidTag(), "kubejs_recipe_ui.ae2.fluid_tag.placeholder");
+        fluidTag.setId(ae2FieldId(type, "transform_fluid_tag"));
+        fluidTag.layout(style -> style.width(115).height(20));
+        fluidTag.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.ae2.fluid_tag")));
+        fluidTag.registerValueListener(value -> {
+            var updated = session.getAe2Settings(type).withTransformFluidTag(value);
+            session.setAe2Settings(type, updated);
+            if (updated.transformCondition() == Ae2RecipeSettings.TransformCondition.FLUID) {
+                setAe2ItemPreview(conditionPreview, ae2TransformPreviewStacks(updated));
+            }
+        });
+        var fluidTagRow = labeledField("kubejs_recipe_ui.ae2.fluid_tag", fluidTag);
+        fluidTagRow.setId(ae2FieldId(type, "transform_fluid_row"));
+        fluidTagRow.layout(style -> style.width(170).height(20));
+        fluidTagRow.setDisplay(settings.transformCondition() == Ae2RecipeSettings.TransformCondition.FLUID);
+
+        var condition = translatedSelector(
+                Ae2RecipeSettings.TransformCondition.values(),
+                settings.transformCondition(),
+                Ae2RecipeSettings.TransformCondition::translationKey,
+                value -> {
+                    var updated = session.getAe2Settings(type).withTransformCondition(value);
+                    session.setAe2Settings(type, updated);
+                    fluidTagRow.setDisplay(value == Ae2RecipeSettings.TransformCondition.FLUID);
+                    setAe2ItemPreview(conditionPreview, ae2TransformPreviewStacks(updated));
+                    conditionLabel.setText(Component.translatable(transformPreviewTranslationKey(value)));
+                }
+        );
+        condition.setId(ae2FieldId(type, "transform_condition"));
+        condition.layout(style -> style.width(115).height(20));
+        var conditionRow = labeledField("kubejs_recipe_ui.ae2.transform_condition", condition);
+        conditionRow.layout(style -> style.width(170).height(20));
+        panel.addChildren(jei, conditionRow, fluidTagRow);
+        return panel;
+    }
+
+    /** 复刻 AE2 熵变处理 JEI 分类，并在下方编辑模式与资源。 */
+    private static UIElement createAe2EntropyPanel(RecipeEditorSession session) {
+        var type = WorkstationType.AE2_ENTROPY;
+        var settings = session.getAe2Settings(type);
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(150).paddingTop(2).gapAll(5));
+        panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
+
+        var jei = ae2JeiCanvas(130, 50);
+        var inputPreview = ae2JeiItemSlot(
+                ae2FieldId(type, "entropy_input_preview"),
+                ae2EntropyInputStack(settings)
+        );
+        inputPreview.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(29).top(15));
+        var arrow = ae2JeiSprite(0, 17, 24, 17);
+        arrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(53).top(14));
+        var outputPreview = ae2JeiItemSlot(
+                ae2FieldId(type, "entropy_output_preview"),
+                ae2EntropyOutputStack(settings)
+        );
+        outputPreview.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(85).top(15));
+        var modeIcon = ae2EntropyModeIcon(settings.entropyMode());
+        modeIcon.setId(ae2FieldId(type, "entropy_mode_icon"));
+        modeIcon.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(36).top(3));
+        var modeLabel = new Label();
+        modeLabel.setId(ae2FieldId(type, "entropy_mode_label"));
+        modeLabel.setText(Component.translatable(entropyPreviewTranslationKey(settings.entropyMode())));
+        modeLabel.textStyle(style -> style.textAlignHorizontal(Horizontal.CENTER));
+        modeLabel.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(43)
+                .top(2)
+                .width(84)
+                .height(10));
+        var actionLabel = new Label();
+        actionLabel.setId(ae2FieldId(type, "entropy_action_label"));
+        actionLabel.setText(Component.translatable(entropyActionTranslationKey(settings.entropyMode())));
+        actionLabel.textStyle(style -> style.textAlignHorizontal(Horizontal.CENTER));
+        actionLabel.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(15)
+                .top(38)
+                .width(100)
+                .height(10));
+        jei.addChildren(inputPreview, arrow, outputPreview, modeIcon, modeLabel, actionLabel);
+
+        var mode = translatedSelector(
+                Ae2RecipeSettings.EntropyMode.values(),
+                settings.entropyMode(),
+                Ae2RecipeSettings.EntropyMode::translationKey,
+                value -> {
+                    session.setAe2Settings(type, session.getAe2Settings(type).withEntropyMode(value));
+                    setEntropyModePreview(modeIcon, modeLabel, actionLabel, value);
+                }
+        );
+        mode.setId(ae2FieldId(type, "entropy_mode"));
+        mode.layout(style -> style.width(115).height(20));
+        var modeRow = labeledField("kubejs_recipe_ui.ae2.entropy_mode", mode);
+        modeRow.layout(style -> style.width(170).height(20));
+
+        var inputType = translatedSelector(
+                Ae2RecipeSettings.EntropyResourceType.values(),
+                settings.entropyInputType(),
+                Ae2RecipeSettings.EntropyResourceType::translationKey,
+                value -> {
+                    var updated = session.getAe2Settings(type).withEntropyInputType(value);
+                    session.setAe2Settings(type, updated);
+                    setAe2ItemPreview(inputPreview, ae2EntropyInputStack(updated));
+                }
+        );
+        inputType.setId(ae2FieldId(type, "entropy_input_type"));
+        inputType.layout(style -> style.width(54).height(20));
+        var inputId = resourceIdField(settings.entropyInputId(), "kubejs_recipe_ui.ae2.resource_id.placeholder");
+        inputId.setId(ae2FieldId(type, "entropy_input_id"));
+        inputId.layout(style -> style.flex(1).height(20));
+        inputId.registerValueListener(value -> {
+            var updated = session.getAe2Settings(type).withEntropyInputId(value);
+            session.setAe2Settings(type, updated);
+            setAe2ItemPreview(inputPreview, ae2EntropyInputStack(updated));
+        });
+        var inputEditor = ae2ResourceEditor("kubejs_recipe_ui.ae2.entropy_input", inputType, inputId);
+
+        var outputType = translatedSelector(
+                Ae2RecipeSettings.EntropyOutputType.values(),
+                settings.entropyOutputType(),
+                Ae2RecipeSettings.EntropyOutputType::translationKey,
+                value -> {
+                    var updated = session.getAe2Settings(type).withEntropyOutputType(value);
+                    session.setAe2Settings(type, updated);
+                    setAe2ItemPreview(outputPreview, ae2EntropyOutputStack(updated));
+                }
+        );
+        outputType.setId(ae2FieldId(type, "entropy_output_type"));
+        outputType.layout(style -> style.width(54).height(20));
+        var outputId = resourceIdField(settings.entropyOutputId(), "kubejs_recipe_ui.ae2.resource_id.placeholder");
+        outputId.setId(ae2FieldId(type, "entropy_output_id"));
+        outputId.layout(style -> style.flex(1).height(20));
+        outputId.registerValueListener(value -> {
+            var updated = session.getAe2Settings(type).withEntropyOutputId(value);
+            session.setAe2Settings(type, updated);
+            setAe2ItemPreview(outputPreview, ae2EntropyOutputStack(updated));
+        });
+        var outputEditor = ae2ResourceEditor("kubejs_recipe_ui.ae2.entropy_output", outputType, outputId);
+
+        var resources = new UIElement();
+        resources.layout(style -> style.width(304).height(34).gapAll(4));
+        resources.lss("flex-direction", "row");
+        resources.addChildren(inputEditor, outputEditor);
+        panel.addChildren(jei, modeRow, resources);
+        return panel;
+    }
+
+    /** 创建熵变分类下方的紧凑资源类型与 ID 编辑器。 */
+    private static UIElement ae2ResourceEditor(String translationKey, Selector<String> type, TextField id) {
+        var editor = new UIElement();
+        editor.layout(style -> style.width(150).height(34).gapAll(3));
+        editor.lss("flex-direction", "column");
+        var label = fieldLabel(translationKey);
+        label.layout(style -> style.widthPercent(100).height(10));
+        var fields = new UIElement();
+        fields.layout(style -> style.widthPercent(100).height(20).gapAll(3));
+        fields.lss("flex-direction", "row");
+        fields.addChildren(type, id);
+        editor.addChildren(label, fields);
+        return editor;
+    }
+
+    /** 创建与 AE2 JEI 分类尺寸完全一致的透明画布。 */
+    private static UIElement ae2JeiCanvas(float width, float height) {
+        var canvas = new UIElement();
+        canvas.layout(style -> style.width(width).height(height));
+        canvas.addClass("kru_jei_canvas");
+        return canvas;
+    }
+
+    /** 从 AE2 自带 JEI 纹理中截取一个原尺寸图块。 */
+    private static UIElement ae2JeiSprite(int x, int y, int width, int height) {
+        var element = new UIElement();
+        element.layout(style -> style.width(width).height(height));
+        element.style(style -> style.background(SpriteTexture.of(AE2_JEI_TEXTURE).setSprite(x, y, width, height)));
+        return element;
+    }
+
+    /** 创建 AE2 JEI 风格的纯展示槽，不参与物品编辑。 */
+    private static UIElement ae2JeiItemSlot(String previewId, ItemStack... stacks) {
+        var slot = ae2JeiSprite(0, 34, 18, 18);
+        if (previewId != null) {
+            slot.setId(previewId);
+        }
+        var item = new UIElement();
+        item.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(1)
+                .top(1)
+                .width(16)
+                .height(16));
+        setAe2ItemPreview(item, stacks);
+        slot.addChild(item);
+        return slot;
+    }
+
+    /** 更新纯展示槽中的物品图标。 */
+    private static void setAe2ItemPreview(UIElement preview, ItemStack... stacks) {
+        var item = preview.getChildren().isEmpty() ? preview : preview.getChildren().getFirst();
+        item.style(style -> style.background(new ItemStackTexture(stacks)));
+    }
+
+    /** @return 物品注册 ID 对应的物品堆，缺失或无物品形态时返回空堆 */
+    private static ItemStack optionalItemStack(String id) {
+        var identifier = Identifier.tryParse(id);
+        if (identifier == null) {
+            return ItemStack.EMPTY;
+        }
+        var item = BuiltInRegistries.ITEM.getValue(identifier);
+        return item == null || item == Items.AIR ? ItemStack.EMPTY : item.getDefaultInstance();
+    }
+
+    /** @return 方块注册 ID 对应的展示物品 */
+    private static ItemStack blockPreviewStack(String id) {
+        var identifier = Identifier.tryParse(id);
+        if (identifier == null) {
+            return ItemStack.EMPTY;
+        }
+        var block = BuiltInRegistries.BLOCK.getValue(identifier);
+        return block == null || block.asItem() == Items.AIR ? ItemStack.EMPTY : block.asItem().getDefaultInstance();
+    }
+
+    /** @return 流体注册 ID 对应的桶物品 */
+    private static ItemStack fluidPreviewStack(String id) {
+        var identifier = Identifier.tryParse(id);
+        if (identifier == null) {
+            return ItemStack.EMPTY;
+        }
+        var fluid = BuiltInRegistries.FLUID.getValue(identifier);
+        return fluid == null || fluid.getBucket() == Items.AIR
+                ? ItemStack.EMPTY
+                : fluid.getBucket().getDefaultInstance();
+    }
+
+    /** @return 物品转化条件在 JEI 中使用的 TNT 或流体桶图标 */
+    private static ItemStack[] ae2TransformPreviewStacks(Ae2RecipeSettings settings) {
+        if (settings.transformCondition() == Ae2RecipeSettings.TransformCondition.FLUID) {
+            return new ItemStack[]{fluidPreviewStack(settings.transformFluidTag())};
+        }
+        var tinyTnt = optionalItemStack("ae2:tiny_tnt");
+        return tinyTnt.isEmpty()
+                ? new ItemStack[]{Items.TNT.getDefaultInstance()}
+                : new ItemStack[]{Items.TNT.getDefaultInstance(), tinyTnt};
+    }
+
+    /** @return 物品转化 JEI 顶部条件说明的翻译键 */
+    private static String transformPreviewTranslationKey(Ae2RecipeSettings.TransformCondition condition) {
+        return condition == Ae2RecipeSettings.TransformCondition.EXPLOSION
+                ? "kubejs_recipe_ui.ae2.transform_preview.explosion"
+                : "kubejs_recipe_ui.ae2.transform_preview.fluid";
+    }
+
+    /** @return 熵变输入在 JEI 展示槽中使用的图标 */
+    private static ItemStack ae2EntropyInputStack(Ae2RecipeSettings settings) {
+        return settings.entropyInputType() == Ae2RecipeSettings.EntropyResourceType.BLOCK
+                ? blockPreviewStack(settings.entropyInputId())
+                : fluidPreviewStack(settings.entropyInputId());
+    }
+
+    /** @return 熵变输出在 JEI 展示槽中使用的图标 */
+    private static ItemStack ae2EntropyOutputStack(Ae2RecipeSettings settings) {
+        return switch (settings.entropyOutputType()) {
+            case BLOCK -> blockPreviewStack(settings.entropyOutputId());
+            case FLUID -> fluidPreviewStack(settings.entropyOutputId());
+            case DROPS -> optionalItemStack(settings.entropyOutputId());
+        };
+    }
+
+    /** 创建 AE2 JEI 纹理中的加热或冷却小图标。 */
+    private static UIElement ae2EntropyModeIcon(Ae2RecipeSettings.EntropyMode mode) {
+        return ae2JeiSprite(mode == Ae2RecipeSettings.EntropyMode.HEAT ? 0 : 6, 68, 6, 6);
+    }
+
+    /** 同步熵变 JEI 预览中的模式图标、能耗说明和操作说明。 */
+    private static void setEntropyModePreview(
+            UIElement icon,
+            Label modeLabel,
+            Label actionLabel,
+            Ae2RecipeSettings.EntropyMode mode
+    ) {
+        icon.style(style -> style.background(SpriteTexture.of(AE2_JEI_TEXTURE)
+                .setSprite(mode == Ae2RecipeSettings.EntropyMode.HEAT ? 0 : 6, 68, 6, 6)));
+        modeLabel.setText(Component.translatable(entropyPreviewTranslationKey(mode)));
+        actionLabel.setText(Component.translatable(entropyActionTranslationKey(mode)));
+    }
+
+    /** @return 熵变 JEI 能耗说明的翻译键 */
+    private static String entropyPreviewTranslationKey(Ae2RecipeSettings.EntropyMode mode) {
+        return mode == Ae2RecipeSettings.EntropyMode.HEAT
+                ? "kubejs_recipe_ui.ae2.entropy_preview.heat"
+                : "kubejs_recipe_ui.ae2.entropy_preview.cool";
+    }
+
+    /** @return 熵变 JEI 操作说明的翻译键 */
+    private static String entropyActionTranslationKey(Ae2RecipeSettings.EntropyMode mode) {
+        return mode == Ae2RecipeSettings.EntropyMode.HEAT
+                ? "kubejs_recipe_ui.ae2.entropy_action.heat"
+                : "kubejs_recipe_ui.ae2.entropy_action.cool";
+    }
+
+    /** 创建显示已翻译枚举值的 LDLib2 下拉框。 */
+    private static <T> Selector<String> translatedSelector(
+            T[] values,
+            T selected,
+            java.util.function.Function<T, String> translationKey,
+            java.util.function.Consumer<T> listener
+    ) {
+        var byDisplay = new HashMap<String, T>();
+        var candidates = Arrays.stream(values).map(value -> {
+            var display = translate(translationKey.apply(value));
+            byDisplay.put(display, value);
+            return display;
+        }).toList();
+        var selector = new Selector<String>();
+        selector.dialog.style(style -> style.zIndex(200));
+        selector.setCandidates(candidates);
+        selector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
+        selector.layout(style -> style.width(120).height(20));
+        selector.setSelected(translate(translationKey.apply(selected)));
+        selector.setOnValueChanged(value -> {
+            var mapped = byDisplay.get(value);
+            if (mapped != null) {
+                listener.accept(mapped);
+            }
+        });
+        return selector;
+    }
+
+    /** 创建允许输入 namespace:path 的资源 ID 文本框。 */
+    private static TextField resourceIdField(String value, String placeholderKey) {
+        var field = new TextField();
+        field.setAnyString();
+        field.setText(value);
+        field.textFieldStyle(style -> style.placeholder(Component.translatable(placeholderKey)));
+        field.layout(style -> style.width(150).height(20));
+        return field;
+    }
+
     /** 创建可复用的紧凑物品槽网格。 */
     private static UIElement createInputGrid(
             UIElement root,
@@ -793,8 +1471,9 @@ public final class RecipeEditorUi {
         cookingTime.registerValueListener(value -> session.setCookingTime(type, parseInt(value, 200)));
 
         var panel = new UIElement();
-        panel.layout(style -> style.widthPercent(100).height(108));
+        panel.layout(style -> style.widthPercent(100).height(102).gapAll(4));
         panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
 
         var furnaceArea = new UIElement();
         furnaceArea.layout(style -> style.width(176).height(76));
@@ -871,8 +1550,9 @@ public final class RecipeEditorUi {
         cookingTime.registerValueListener(value -> session.setCookingTime(type, parseInt(value, type.defaultCookingTime())));
 
         var panel = new UIElement();
-        panel.layout(style -> style.widthPercent(100).height(88));
+        panel.layout(style -> style.widthPercent(100).height(88).gapAll(4));
         panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
 
         var recipe = workstationRow(14);
         recipe.addChildren(
@@ -1075,6 +1755,128 @@ public final class RecipeEditorUi {
                 + fieldName;
     }
 
+    /** 生成 AE2 专属控件在 JEI 回填时使用的稳定元素 ID。 */
+    private static String ae2FieldId(WorkstationType type, String fieldName) {
+        return "kubejs_recipe_ui#ae2_"
+                + type.name().toLowerCase(java.util.Locale.ROOT)
+                + "_"
+                + fieldName;
+    }
+
+    /** 将 AE2 配方对象读取到的专属参数同步到已经挂载的 LDLib2 控件。 */
+    private static void updateAe2Fields(
+            UIElement root,
+            WorkstationType type,
+            Ae2RecipeSettings settings
+    ) {
+        switch (type) {
+            case AE2_INSCRIBER -> updateSelector(
+                    root,
+                    ae2FieldId(type, "inscriber_mode"),
+                    translate(settings.inscriberMode().translationKey())
+            );
+            case AE2_TRANSFORM -> {
+                updateSelector(
+                        root,
+                        ae2FieldId(type, "transform_condition"),
+                        translate(settings.transformCondition().translationKey())
+                );
+                updateTextField(root, ae2FieldId(type, "transform_fluid_tag"), settings.transformFluidTag());
+                var row = root.getModularUI() == null
+                        ? null
+                        : root.getModularUI().getElementById(ae2FieldId(type, "transform_fluid_row"));
+                if (row != null) {
+                    row.setDisplay(settings.transformCondition() == Ae2RecipeSettings.TransformCondition.FLUID);
+                }
+                updateAe2ItemPreview(
+                        root,
+                        ae2FieldId(type, "transform_condition_preview"),
+                        ae2TransformPreviewStacks(settings)
+                );
+                updateLabel(
+                        root,
+                        ae2FieldId(type, "transform_condition_label"),
+                        Component.translatable(transformPreviewTranslationKey(settings.transformCondition()))
+                );
+            }
+            case AE2_ENTROPY -> {
+                updateSelector(
+                        root,
+                        ae2FieldId(type, "entropy_mode"),
+                        translate(settings.entropyMode().translationKey())
+                );
+                updateSelector(
+                        root,
+                        ae2FieldId(type, "entropy_input_type"),
+                        translate(settings.entropyInputType().translationKey())
+                );
+                updateTextField(root, ae2FieldId(type, "entropy_input_id"), settings.entropyInputId());
+                updateSelector(
+                        root,
+                        ae2FieldId(type, "entropy_output_type"),
+                        translate(settings.entropyOutputType().translationKey())
+                );
+                updateTextField(root, ae2FieldId(type, "entropy_output_id"), settings.entropyOutputId());
+                updateAe2ItemPreview(
+                        root,
+                        ae2FieldId(type, "entropy_input_preview"),
+                        ae2EntropyInputStack(settings)
+                );
+                updateAe2ItemPreview(
+                        root,
+                        ae2FieldId(type, "entropy_output_preview"),
+                        ae2EntropyOutputStack(settings)
+                );
+                var modeIcon = getElement(root, ae2FieldId(type, "entropy_mode_icon"));
+                var modeLabel = getElement(root, ae2FieldId(type, "entropy_mode_label"));
+                var actionLabel = getElement(root, ae2FieldId(type, "entropy_action_label"));
+                if (modeIcon != null && modeLabel instanceof Label label && actionLabel instanceof Label action) {
+                    setEntropyModePreview(modeIcon, label, action, settings.entropyMode());
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** 按稳定 ID 获取已经挂载到 ModularUI 的控件。 */
+    private static UIElement getElement(UIElement root, String id) {
+        return root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
+    }
+
+    /** JEI 回填时同步纯展示槽中的图标。 */
+    private static void updateAe2ItemPreview(UIElement root, String id, ItemStack... stacks) {
+        var element = getElement(root, id);
+        if (element != null) {
+            setAe2ItemPreview(element, stacks);
+        }
+    }
+
+    /** JEI 回填时同步预览说明文字。 */
+    private static void updateLabel(UIElement root, String id, Component text) {
+        var element = getElement(root, id);
+        if (element instanceof Label label) {
+            label.setText(text);
+        }
+    }
+
+    /** JEI 回填时同步修改已经挂载到 ModularUI 的下拉框。 */
+    @SuppressWarnings("unchecked")
+    private static void updateSelector(UIElement root, String id, String value) {
+        var element = root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
+        if (element instanceof Selector<?> selector) {
+            ((Selector<String>) selector).setSelected(value);
+        }
+    }
+
+    /** JEI 回填时同步修改已经挂载到 ModularUI 的文本输入框。 */
+    private static void updateTextField(UIElement root, String id, String value) {
+        var element = root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
+        if (element instanceof TextField field) {
+            field.setText(value);
+        }
+    }
+
     /** JEI 回填时同步修改已经挂载到 ModularUI 的整数输入框。 */
     private static void updateNumericField(UIElement root, String id, int value) {
         var element = root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
@@ -1144,10 +1946,11 @@ public final class RecipeEditorUi {
         var button = new Button();
         button.setText(text);
         button.layout(style -> style.width(width).height(20));
+        button.addClass("kru_action_button");
         return button;
     }
 
-    /** 创建控制输入或输出数据组件是否参与生成的 LDLib2 现代开关。 */
+    /** 创建控制输入或输出数据组件是否参与生成的 LDLib2 原版风格开关。 */
     private static Switch componentSwitch(String translationKey, boolean enabled) {
         var control = new Switch();
         control.setOn(enabled, false);
@@ -1156,7 +1959,7 @@ public final class RecipeEditorUi {
         return control;
     }
 
-    /** 将现代开关与可翻译标签组合成属性检查器中的一行。 */
+    /** 将原版风格开关与可翻译标签组合成属性检查器中的一行。 */
     private static UIElement switchOptionRow(String translationKey, Switch control) {
         var row = new UIElement();
         row.layout(style -> style.widthPercent(100).height(20).gapAll(4));
@@ -1172,12 +1975,13 @@ public final class RecipeEditorUi {
         return row;
     }
 
-    /** 创建现代编辑器属性检查器的分组标题。 */
+    /** 创建浅色编辑器属性检查器的分组标题。 */
     private static Label editorSectionLabel(String translationKey) {
         var label = new Label();
         label.setText(Component.translatable(translationKey));
         label.layout(style -> style.widthPercent(100).height(14).marginTop(2));
         label.textStyle(style -> style.textAlignVertical(Vertical.CENTER));
+        label.addClass("kru_section_label");
         return label;
     }
 
@@ -1194,6 +1998,7 @@ public final class RecipeEditorUi {
         row.layout(style -> style.widthPercent(100).height(18).gapAll(6));
         row.lss("flex-direction", "row");
         row.lss("align-items", "center");
+        row.addClass("kru_source_row");
 
         var key = new Label();
         key.setText(Component.translatable(translationKey));

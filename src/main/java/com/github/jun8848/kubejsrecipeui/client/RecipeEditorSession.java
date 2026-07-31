@@ -1,5 +1,6 @@
 package com.github.jun8848.kubejsrecipeui.client;
 
+import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.OutputSpec;
@@ -199,6 +200,16 @@ public final class RecipeEditorSession {
         state.extendedCraftingTime = settings.craftingTime();
     }
 
+    /** @return 指定 AE2 编辑器当前保存的专属参数 */
+    public Ae2RecipeSettings getAe2Settings(WorkstationType type) {
+        return state(type).ae2Settings;
+    }
+
+    /** 保存界面编辑或 JEI 回填得到的 AE2 专属参数。 */
+    public void setAe2Settings(WorkstationType type, Ae2RecipeSettings settings) {
+        state(type).ae2Settings = java.util.Objects.requireNonNull(settings, "settings");
+    }
+
     /** 更新配方 ID、类型、来源模组和分组。 */
     public void setSourceInfo(RecipeSourceInfo sourceInfo) {
         this.sourceInfo = sourceInfo == null ? RecipeSourceInfo.EMPTY : sourceInfo;
@@ -282,7 +293,9 @@ public final class RecipeEditorSession {
      */
     public RecipeDefinition createDefinition(boolean includeInputComponents, boolean includeOutputComponents) {
         var state = state(activeType);
-        var output = createOutput(includeOutputComponents);
+        var output = activeType == WorkstationType.AE2_ENTROPY
+                ? null
+                : createOutput(includeOutputComponents);
         var inputs = Arrays.stream(state.inputSpecs)
                 .map(spec -> includeInputComponents ? spec : withoutComponents(spec))
                 .toList();
@@ -300,7 +313,8 @@ public final class RecipeEditorSession {
                         state.powerRate,
                         state.ingredientCount,
                         state.extendedCraftingTime
-                )
+                ),
+                state.ae2Settings
         );
     }
 
@@ -333,6 +347,9 @@ public final class RecipeEditorSession {
             case MOD -> sourceInfo.mod();
             case GROUP -> sourceInfo.group();
             case INPUT -> {
+                if (activeType == WorkstationType.AE2_ENTROPY) {
+                    yield state(activeType).ae2Settings.entropyInputId();
+                }
                 var specification = Arrays.stream(state(activeType).inputSpecs)
                         .filter(java.util.Objects::nonNull)
                         .findFirst()
@@ -342,6 +359,9 @@ public final class RecipeEditorSession {
                         : withoutComponents(specification));
             }
             case OUTPUT -> {
+                if (activeType == WorkstationType.AE2_ENTROPY) {
+                    yield state(activeType).ae2Settings.entropyOutputId();
+                }
                 var output = createOutput(includeOutputComponents);
                 yield output.itemId() + output.componentPatch();
             }
@@ -439,6 +459,7 @@ public final class RecipeEditorSession {
         private int powerRate;
         private int ingredientCount;
         private int extendedCraftingTime;
+        private Ae2RecipeSettings ae2Settings;
 
         private EditorState(WorkstationType type) {
             inputStacks = new ItemStack[type.inputCount()];
@@ -449,6 +470,7 @@ public final class RecipeEditorSession {
             powerRate = type.defaultPowerRate();
             ingredientCount = type.defaultIngredientCount();
             extendedCraftingTime = type.defaultCraftingTime();
+            ae2Settings = Ae2RecipeSettings.defaults();
             Arrays.fill(inputStacks, ItemStack.EMPTY);
         }
     }

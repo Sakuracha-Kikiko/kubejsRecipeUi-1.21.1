@@ -2,6 +2,7 @@ package com.github.jun8848.kubejsrecipeui.integration.jei;
 
 import com.github.jun8848.kubejsrecipeui.KubeJsRecipeUi;
 import com.github.jun8848.kubejsrecipeui.client.RecipeEditorJeiBridge;
+import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
@@ -56,6 +57,9 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         register(registration, RecipeTypes.SMITHING, WorkstationType.SMITHING);
         if (ModList.get().isLoaded(WorkstationType.EXTENDED_CRAFTING_MOD_ID)) {
             ExtendedCraftingJeiIntegration.register(registration);
+        }
+        if (ModList.get().isLoaded(WorkstationType.AE2_MOD_ID)) {
+            Ae2JeiIntegration.register(registration);
         }
     }
 
@@ -149,7 +153,8 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
                     height,
                     experience,
                     cookingTime,
-                    ExtendedRecipeSettings.defaults(workstationType)
+                    ExtendedRecipeSettings.defaults(workstationType),
+                    Ae2RecipeSettings.defaults()
             );
             return null;
         }

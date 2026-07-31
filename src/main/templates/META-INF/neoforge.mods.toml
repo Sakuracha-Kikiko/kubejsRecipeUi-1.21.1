@@ -54,3 +54,11 @@ reason="Enables Extended Crafting recipe editor workstations when installed."
 versionRange="[${extended_crafting_version_range},)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="ae2"
+type="optional"
+reason="Enables Applied Energistics 2 recipe editors when installed."
+versionRange="[${ae2_version_range},)"
+ordering="AFTER"
+side="BOTH"

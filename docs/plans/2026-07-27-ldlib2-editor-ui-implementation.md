@@ -1,8 +1,8 @@
 # LDLib2 Editor UI Implementation Plan
 
-**Goal:** Replace the simple single-column recipe UI with an LDLib2 modern editor layout.
+**Goal:** Build a dense LDLib2 editor layout with the light vanilla/JEI visual language.
 
-**Architecture:** Keep recipe state and code generation responsibilities separated from the UI. Refactor `RecipeEditorUi` composition to use LDLib2 modern stylesheet and advanced containers, then add only the translation keys required by the new editor chrome.
+**Architecture:** Keep recipe state and code generation responsibilities separated from the UI. Use LDLib2's MC stylesheet for the light shell and advanced containers for the editor workspace, then add local classes only for visual hierarchy.
 
 **Tech Stack:** Java 25, NeoForge, LDLib2 ModularUI, KubeJS, JEI
 
@@ -15,7 +15,7 @@
 
 1. Import `SplitView`, `TabView`, `Tab`, `ScrollerView`, and `Switch`.
 2. Change the root to a wide column layout with a top toolbar and content row.
-3. Switch the final UI stylesheet from `MC` to `MODERN`.
+3. Use the `MC` stylesheet and add JEI-style classes for the root frame, title, sidebar, canvas, inspector and tabs.
 4. Verify with `./gradlew.bat compileJava`.
 
 ### Task 2: Refactor recipe workspace
@@ -26,8 +26,8 @@
 1. Move recipe controls into a right-side `ScrollerView` inspector.
 2. Place workstation slots and inventory in the central canvas.
 3. Place canvas and inspector in `SplitView.Horizontal`.
-4. Place workspace and bottom panel in `SplitView.Vertical`.
-5. Add `TabView` tabs for code preview and JEI source information.
+4. Use a full-height right-side `TabView` for property, code preview and JEI source modes.
+5. Switch to the code tab after preview generation without changing existing data bindings.
 6. Replace component `Toggle` controls with labeled `Switch` controls.
 7. Verify with `./gradlew.bat compileJava`.
 
