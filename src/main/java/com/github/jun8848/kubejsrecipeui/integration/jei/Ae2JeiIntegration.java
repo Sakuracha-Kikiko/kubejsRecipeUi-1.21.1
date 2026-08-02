@@ -8,8 +8,9 @@ import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
 import appeng.recipes.transform.TransformRecipe;
 import com.github.jun8848.kubejsrecipeui.client.RecipeEditorJeiBridge;
+import com.github.jun8848.kubejsrecipeui.client.RecipeTransferData;
 import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
-import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
+import com.github.jun8848.kubejsrecipeui.recipe.RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIContainerMenu;
@@ -212,7 +213,7 @@ final class Ae2JeiIntegration {
                     recipeId.getNamespace(),
                     recipe.group()
             );
-            bridge.fill(
+            bridge.fill(new RecipeTransferData(
                     workstationType,
                     List.copyOf(inputs),
                     outputFactory.apply(recipe),
@@ -222,9 +223,8 @@ final class Ae2JeiIntegration {
                     0,
                     0.0F,
                     200,
-                    ExtendedRecipeSettings.defaults(workstationType),
-                    settingsFactory.apply(recipe)
-            );
+                    RecipeSettings.of(settingsFactory.apply(recipe))
+            ));
             return null;
         }
     }

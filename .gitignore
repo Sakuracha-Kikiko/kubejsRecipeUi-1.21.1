@@ -43,3 +43,6 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+# 本地构建的第三方开发模组，不提交到项目仓库。
+libs/Mekanism-*.jar

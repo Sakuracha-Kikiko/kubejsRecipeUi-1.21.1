@@ -7,7 +7,7 @@ public record ExtendedRecipeSettings(
         int powerRate,
         int ingredientCount,
         int craftingTime
-) {
+) implements RecipeIntegrationSettings {
     public ExtendedRecipeSettings {
         if (tier < 0 || tier > 4) {
             throw new IllegalArgumentException("扩展工作台阶级必须在 0 到 4 之间");
@@ -24,12 +24,36 @@ public record ExtendedRecipeSettings(
     }
 
     public static ExtendedRecipeSettings defaults(WorkstationType type) {
-        return new ExtendedRecipeSettings(
-                type.extendedTier(),
-                type.defaultPowerCost(),
-                type.defaultPowerRate(),
-                type.defaultIngredientCount(),
-                type.defaultCraftingTime()
-        );
+        return switch (type) {
+            case EXTENDED_BASIC_TABLE -> new ExtendedRecipeSettings(1, 0, 0, 1, 1);
+            case EXTENDED_ADVANCED_TABLE -> new ExtendedRecipeSettings(2, 0, 0, 1, 1);
+            case EXTENDED_ELITE_TABLE -> new ExtendedRecipeSettings(3, 0, 0, 1, 1);
+            case EXTENDED_ULTIMATE_TABLE -> new ExtendedRecipeSettings(4, 0, 0, 1, 1);
+            case EXTENDED_COMBINATION -> new ExtendedRecipeSettings(0, 400_000, 500, 1, 1);
+            case EXTENDED_COMPRESSOR -> new ExtendedRecipeSettings(0, 500_000, 5_000, 10_000, 1);
+            case EXTENDED_ENDER_CRAFTER -> new ExtendedRecipeSettings(0, 0, 0, 1, 60);
+            case EXTENDED_FLUX_CRAFTER -> new ExtendedRecipeSettings(0, 100_000, 400, 1, 1);
+            default -> throw new IllegalArgumentException("不是 Extended Crafting 工作站: " + type);
+        };
+    }
+
+    public ExtendedRecipeSettings withTier(int value) {
+        return new ExtendedRecipeSettings(value, powerCost, powerRate, ingredientCount, craftingTime);
+    }
+
+    public ExtendedRecipeSettings withPowerCost(int value) {
+        return new ExtendedRecipeSettings(tier, value, powerRate, ingredientCount, craftingTime);
+    }
+
+    public ExtendedRecipeSettings withPowerRate(int value) {
+        return new ExtendedRecipeSettings(tier, powerCost, value, ingredientCount, craftingTime);
+    }
+
+    public ExtendedRecipeSettings withIngredientCount(int value) {
+        return new ExtendedRecipeSettings(tier, powerCost, powerRate, value, craftingTime);
+    }
+
+    public ExtendedRecipeSettings withCraftingTime(int value) {
+        return new ExtendedRecipeSettings(tier, powerCost, powerRate, ingredientCount, value);
     }
 }

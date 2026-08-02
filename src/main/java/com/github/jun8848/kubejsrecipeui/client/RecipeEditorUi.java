@@ -4,18 +4,23 @@ import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.KubeJsRecipeGenerator;
+import com.github.jun8848.kubejsrecipeui.recipe.MekanismRecipeSettings;
+import com.github.jun8848.kubejsrecipeui.recipe.MekanismRecipeSettings.ResourceField;
+import com.github.jun8848.kubejsrecipeui.recipe.MekanismRecipeSettings.ResourceStack;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDeleteMode;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDefinition;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeWriteService;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeWriteMode;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.gui.LDLibFonts;
 import com.lowdragmc.lowdraglib2.gui.factory.BlockUIMenuType;
 import com.lowdragmc.lowdraglib2.gui.sync.bindings.impl.DataBindingBuilder;
 import com.lowdragmc.lowdraglib2.gui.sync.rpc.RPCEventBuilder;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.texture.ItemStackTexture;
 import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
+import com.lowdragmc.lowdraglib2.math.Size;
 import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
 import com.lowdragmc.lowdraglib2.gui.ui.UI;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
@@ -35,24 +40,35 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.TabView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.CodeEditor;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.language.Languages;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.language.StyleManager;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.codeeditor.language.TokenTypes;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.inventory.InventorySlots;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.style.StylesheetManager;
 import dev.vfyjxf.taffy.style.TaffyPosition;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.material.Fluids;
+import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.fluids.FluidStack;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 使用 LDLib2 构建配方编辑器的完整客户端界面。
@@ -60,9 +76,18 @@ import java.util.HashMap;
  */
 public final class RecipeEditorUi {
     private static final float SLOT_SIZE = 18.0F;
-    private static final Identifier MINECRAFT_FONT = Identifier.withDefaultNamespace("default");
+    private static final int EDITOR_WIDTH = 600;
+    private static final int EDITOR_HEIGHT = 360;
+    private static final int SCREEN_MARGIN = 6;
+    private static final float RECIPE_PANEL_PERCENT = 64.0F;
+    private static final float PREVIEW_PANEL_PERCENT = 48.0F;
     private static final Identifier AE2_JEI_TEXTURE = Identifier.fromNamespaceAndPath("ae2", "textures/guis/jei.png");
+    private static final Identifier JEI_RECIPE_ARROW_TEXTURE = Identifier.fromNamespaceAndPath(
+            "jei",
+            "textures/jei/atlas/gui/recipe_arrow.png"
+    );
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static volatile Map<String, String> mekanismChemicalTranslationKeys;
 
     private RecipeEditorUi() {
     }
@@ -74,13 +99,15 @@ public final class RecipeEditorUi {
         var session = new RecipeEditorSession(holder.player);
         var availableTypes = WorkstationType.availableValues();
         var sidebarTypes = availableTypes.stream()
-                .filter(type -> !type.isExtendedTable() || type == WorkstationType.EXTENDED_BASIC_TABLE)
-                .filter(type -> !type.isAe2() || type == WorkstationType.AE2_CHARGER)
+                .filter(type -> type.navigationType() == type)
                 .toList();
+        var selectedTypesByNavigation = new EnumMap<WorkstationType, WorkstationType>(WorkstationType.class);
+        sidebarTypes.forEach(type -> selectedTypesByNavigation.put(type, type));
         var root = new UIElement();
         root.layout(style -> style
-                .width(600)
-                .height(360)
+                .width(EDITOR_WIDTH)
+                .height(EDITOR_HEIGHT)
+                .flexShrink(0)
                 .gapAll(4)
         );
         root.lss("flex-direction", "column");
@@ -116,8 +143,8 @@ public final class RecipeEditorUi {
         sidebar.layout(style -> style
                 .width(34)
                 .heightPercent(100)
-                .paddingAll(5)
-                .gapAll(4)
+                .paddingAll(3)
+                .gapAll(2)
         );
         sidebar.lss("flex-direction", "column");
         sidebar.lss("align-items", "center");
@@ -177,31 +204,53 @@ public final class RecipeEditorUi {
                 switchOptionRow("kubejs_recipe_ui.recipe_components.output", outputComponents)
         );
 
-        // 四个 Extended Crafting 工作台共用一个侧栏入口，通过下拉框切换实际网格和独立编辑状态。
-        var extendedTableByDisplay = new HashMap<String, WorkstationType>();
-        var extendedTableDisplay = new EnumMap<WorkstationType, String>(WorkstationType.class);
-        var extendedTableCandidates = availableTypes.stream()
-                .filter(WorkstationType::isExtendedTable)
+        // 每个模组只占用一个侧栏入口，具体配方类型统一在属性栏内选择。
+        var vanillaTypeByDisplay = new HashMap<String, WorkstationType>();
+        var vanillaTypeDisplay = new EnumMap<WorkstationType, String>(WorkstationType.class);
+        var vanillaTypeCandidates = availableTypes.stream()
+                .filter(WorkstationType::isVanilla)
                 .map(type -> {
-                    var display = translate(extendedTableLevelTranslationKey(type));
-                    extendedTableByDisplay.put(display, type);
-                    extendedTableDisplay.put(type, display);
+                    var display = translate(type.translationKey());
+                    vanillaTypeByDisplay.put(display, type);
+                    vanillaTypeDisplay.put(type, display);
                     return display;
                 })
                 .toList();
-        var selectedExtendedTable = new WorkstationType[]{WorkstationType.EXTENDED_BASIC_TABLE};
-        var extendedTableSelector = new Selector<String>();
-        extendedTableSelector.dialog.style(style -> style.zIndex(200));
-        extendedTableSelector.setCandidates(extendedTableCandidates);
-        if (!extendedTableCandidates.isEmpty()) {
-            extendedTableSelector.setSelected(extendedTableCandidates.getFirst());
+        var vanillaTypeSelector = new Selector<String>();
+        vanillaTypeSelector.dialog.style(style -> style.zIndex(200));
+        vanillaTypeSelector.setCandidates(vanillaTypeCandidates);
+        if (!vanillaTypeCandidates.isEmpty()) {
+            vanillaTypeSelector.setSelected(vanillaTypeCandidates.getFirst());
         }
-        extendedTableSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
-        extendedTableSelector.layout(style -> style.width(115).height(20));
-        var extendedTableSelectorRow = labeledField("kubejs_recipe_ui.extended.table_level", extendedTableSelector);
-        extendedTableSelectorRow.layout(style -> style.widthPercent(100).height(20));
-        extendedTableSelectorRow.setDisplay(false);
-        inspectorContent.addChild(extendedTableSelectorRow);
+        vanillaTypeSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
+        vanillaTypeSelector.layout(style -> style.width(115).height(20));
+        var vanillaTypeSelectorRow = labeledField("kubejs_recipe_ui.editor.recipe_type", vanillaTypeSelector);
+        vanillaTypeSelectorRow.layout(style -> style.widthPercent(100).height(20));
+        inspectorContent.addChild(vanillaTypeSelectorRow);
+
+        var extendedTypeByDisplay = new HashMap<String, WorkstationType>();
+        var extendedTypeDisplay = new EnumMap<WorkstationType, String>(WorkstationType.class);
+        var extendedTypeCandidates = availableTypes.stream()
+                .filter(WorkstationType::isExtendedCrafting)
+                .map(type -> {
+                    var display = translate(type.translationKey());
+                    extendedTypeByDisplay.put(display, type);
+                    extendedTypeDisplay.put(type, display);
+                    return display;
+                })
+                .toList();
+        var extendedTypeSelector = new Selector<String>();
+        extendedTypeSelector.dialog.style(style -> style.zIndex(200));
+        extendedTypeSelector.setCandidates(extendedTypeCandidates);
+        if (!extendedTypeCandidates.isEmpty()) {
+            extendedTypeSelector.setSelected(extendedTypeCandidates.getFirst());
+        }
+        extendedTypeSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
+        extendedTypeSelector.layout(style -> style.width(115).height(20));
+        var extendedTypeSelectorRow = labeledField("kubejs_recipe_ui.editor.recipe_type", extendedTypeSelector);
+        extendedTypeSelectorRow.layout(style -> style.widthPercent(100).height(20));
+        extendedTypeSelectorRow.setDisplay(false);
+        inspectorContent.addChild(extendedTypeSelectorRow);
 
         // 四类 AE2 配方共用一个侧栏入口，类型下拉框负责切换各自独立的编辑状态。
         var ae2TypeByDisplay = new HashMap<String, WorkstationType>();
@@ -215,7 +264,6 @@ public final class RecipeEditorUi {
                     return display;
                 })
                 .toList();
-        var selectedAe2Type = new WorkstationType[]{WorkstationType.AE2_CHARGER};
         var ae2TypeSelector = new Selector<String>();
         ae2TypeSelector.dialog.style(style -> style.zIndex(200));
         ae2TypeSelector.setCandidates(ae2TypeCandidates);
@@ -224,10 +272,35 @@ public final class RecipeEditorUi {
         }
         ae2TypeSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
         ae2TypeSelector.layout(style -> style.width(115).height(20));
-        var ae2TypeSelectorRow = labeledField("kubejs_recipe_ui.ae2.recipe_type", ae2TypeSelector);
+        var ae2TypeSelectorRow = labeledField("kubejs_recipe_ui.editor.recipe_type", ae2TypeSelector);
         ae2TypeSelectorRow.layout(style -> style.widthPercent(100).height(20));
         ae2TypeSelectorRow.setDisplay(false);
         inspectorContent.addChild(ae2TypeSelectorRow);
+
+        // 全部 Mekanism 数据包配方共用一个入口，通过下拉框切换独立编辑状态。
+        var mekanismTypeByDisplay = new HashMap<String, WorkstationType>();
+        var mekanismTypeDisplay = new EnumMap<WorkstationType, String>(WorkstationType.class);
+        var mekanismTypeCandidates = availableTypes.stream()
+                .filter(WorkstationType::isMekanism)
+                .map(type -> {
+                    var display = translate(type.translationKey());
+                    mekanismTypeByDisplay.put(display, type);
+                    mekanismTypeDisplay.put(type, display);
+                    return display;
+                })
+                .toList();
+        var mekanismTypeSelector = new Selector<String>();
+        mekanismTypeSelector.dialog.style(style -> style.zIndex(200));
+        mekanismTypeSelector.setCandidates(mekanismTypeCandidates);
+        if (!mekanismTypeCandidates.isEmpty()) {
+            mekanismTypeSelector.setSelected(mekanismTypeCandidates.getFirst());
+        }
+        mekanismTypeSelector.setCandidateUIProvider(RecipeEditorUi::slowRollingLabel);
+        mekanismTypeSelector.layout(style -> style.width(115).height(20));
+        var mekanismTypeSelectorRow = labeledField("kubejs_recipe_ui.editor.recipe_type", mekanismTypeSelector);
+        mekanismTypeSelectorRow.layout(style -> style.widthPercent(100).height(20));
+        mekanismTypeSelectorRow.setDisplay(false);
+        inspectorContent.addChild(mekanismTypeSelectorRow);
 
         // Selector 返回显示文本，通过映射恢复实际删除枚举。
         var deleteModeByDisplay = new HashMap<String, RecipeDeleteMode>();
@@ -298,7 +371,19 @@ public final class RecipeEditorUi {
         // 预览框既展示生成结果，也允许玩家在写入前手动调整代码。
         var codePreview = new CodeEditor();
         codePreview.setLanguage(Languages.JAVASCRIPT);
-        codePreview.textAreaStyle(style -> style.font(MINECRAFT_FONT));
+        codePreview.setStyleManager(createLightCodeStyle());
+        codePreview.setActive(true);
+        codePreview.setFocusable(true);
+        codePreview.contentView.setAllowHitTest(true);
+        // 标签页和滚动条都可能参与命中测试，捕获点击后显式把键盘焦点交还给代码编辑器。
+        codePreview.contentView.addEventListener("mouseDown", event -> codePreview.focus(), true);
+        // CodeEditor 不继承 text-area 的文本样式，必须显式关闭默认阴影，否则高 GUI 缩放下会出现重影。
+        codePreview.textAreaStyle(style -> style
+                .font(LDLibFonts.JETBRAINS_MONO_BOLD)
+                .fontSize(9.0F)
+                .lineSpacing(2.0F)
+                .textShadow(false)
+        );
         codePreview.setValue(new String[0], false);
         codePreview.layout(style -> style.widthPercent(100).heightPercent(100));
 
@@ -345,7 +430,7 @@ public final class RecipeEditorUi {
         // 所有工作站面板只创建一次，侧边栏切换时仅改变可见性以保留控件状态。
         var panels = new EnumMap<WorkstationType, UIElement>(WorkstationType.class);
         for (var type : availableTypes) {
-            var panel = createWorkstationPanel(root, holder, session, type);
+            var panel = RecipeEditorPanelRegistry.create(root, holder, session, type);
             panel.setDisplay(type == WorkstationType.CRAFTING);
             panels.put(type, panel);
             editorArea.addChild(panel);
@@ -403,6 +488,15 @@ public final class RecipeEditorUi {
         );
         inspectorTabs.selectTab(propertiesTab);
 
+        var workspaceSplit = new SplitView.Horizontal();
+        workspaceSplit.setPercentage(RECIPE_PANEL_PERCENT).left(recipeCanvas).right(inspectorTabs);
+        workspaceSplit.layout(style -> style.widthPercent(100).heightPercent(100));
+        workspaceSplit.addClass("kru_workspace_split");
+        // 配方属性需要较宽的工作区；代码和来源模式自动扩大右栏，长 ID 无需挤在窄列中。
+        inspectorTabs.setOnTabSelected(tab -> workspaceSplit.setPercentage(
+                tab == propertiesTab ? RECIPE_PANEL_PERCENT : PREVIEW_PANEL_PERCENT
+        ));
+
         // 代码生成成功后自动切换到预览模式，属性、预览和来源共用完整右栏空间。
         captureClick(previewButton, "生成代码预览", event -> generateRecipe(
                 session,
@@ -415,11 +509,6 @@ public final class RecipeEditorUi {
                     inspectorTabs.selectTab(codeTab);
                 }
         ));
-
-        var workspaceSplit = new SplitView.Horizontal();
-        workspaceSplit.setPercentage(64).left(recipeCanvas).right(inspectorTabs);
-        workspaceSplit.layout(style -> style.widthPercent(100).heightPercent(100));
-        workspaceSplit.addClass("kru_workspace_split");
         main.addChild(workspaceSplit);
 
         var workstationButtons = new EnumMap<WorkstationType, Button>(WorkstationType.class);
@@ -436,31 +525,39 @@ public final class RecipeEditorUi {
             icon.addClass("kru_sidebar_icon");
             button.addChild(icon);
             button.style(style -> style.tooltips(Component.translatable(
-                    type == WorkstationType.EXTENDED_BASIC_TABLE
-                            ? "kubejs_recipe_ui.workstation.extended_table"
+                    type == WorkstationType.CRAFTING
+                            ? "kubejs_recipe_ui.integration.minecraft"
+                            : type == WorkstationType.EXTENDED_BASIC_TABLE
+                            ? "kubejs_recipe_ui.integration.extendedcrafting"
                             : type == WorkstationType.AE2_CHARGER
-                            ? "kubejs_recipe_ui.workstation.ae2"
+                            ? "kubejs_recipe_ui.integration.ae2"
+                            : type == WorkstationType.MEKANISM_CRUSHING
+                            ? "kubejs_recipe_ui.integration.mekanism"
                             : type.translationKey()
             )));
             button.setActive(type != WorkstationType.CRAFTING);
             captureClick(button, "切换工作方块: " + type, event -> {
-                var targetType = type == WorkstationType.EXTENDED_BASIC_TABLE
-                        ? selectedExtendedTable[0]
-                        : type == WorkstationType.AE2_CHARGER
-                        ? selectedAe2Type[0]
-                        : type;
+                var targetType = selectedTypesByNavigation.getOrDefault(type, type);
                 main.setDisplay(true);
                 session.setActiveType(targetType);
                 title.setText(Component.translatable(targetType.translationKey()));
                 showWorkstationPanel(panels, targetType);
                 updateWorkstationButtons(workstationButtons, targetType);
-                extendedTableSelectorRow.setDisplay(targetType.isExtendedTable());
+                vanillaTypeSelectorRow.setDisplay(targetType.isVanilla());
+                extendedTypeSelectorRow.setDisplay(targetType.isExtendedCrafting());
                 ae2TypeSelectorRow.setDisplay(targetType.isAe2());
-                if (targetType.isExtendedTable()) {
-                    extendedTableSelector.setSelected(extendedTableDisplay.get(targetType));
+                mekanismTypeSelectorRow.setDisplay(targetType.isMekanism());
+                if (targetType.isVanilla()) {
+                    vanillaTypeSelector.setSelected(vanillaTypeDisplay.get(targetType));
+                }
+                if (targetType.isExtendedCrafting()) {
+                    extendedTypeSelector.setSelected(extendedTypeDisplay.get(targetType));
                 }
                 if (targetType.isAe2()) {
                     ae2TypeSelector.setSelected(ae2TypeDisplay.get(targetType));
+                }
+                if (targetType.isMekanism()) {
+                    mekanismTypeSelector.setSelected(mekanismTypeDisplay.get(targetType));
                 }
                 modeButton.setDisplay(targetType.supportsShaped());
                 modeButton.setText(Component.translatable(session.isShaped()
@@ -471,17 +568,33 @@ public final class RecipeEditorUi {
             sidebar.addChild(button);
         }
 
-        extendedTableSelector.setOnValueChanged(value -> {
-            var type = extendedTableByDisplay.get(value);
+        vanillaTypeSelector.setOnValueChanged(value -> {
+            var type = vanillaTypeByDisplay.get(value);
             if (type == null) {
                 return;
             }
-            selectedExtendedTable[0] = type;
+            selectedTypesByNavigation.put(type.navigationType(), type);
             session.setActiveType(type);
             title.setText(Component.translatable(type.translationKey()));
             showWorkstationPanel(panels, type);
             updateWorkstationButtons(workstationButtons, type);
-            modeButton.setDisplay(true);
+            modeButton.setDisplay(type.supportsShaped());
+            modeButton.setText(Component.translatable(session.isShaped()
+                    ? "kubejs_recipe_ui.action.shaped"
+                    : "kubejs_recipe_ui.action.shapeless"));
+        });
+
+        extendedTypeSelector.setOnValueChanged(value -> {
+            var type = extendedTypeByDisplay.get(value);
+            if (type == null) {
+                return;
+            }
+            selectedTypesByNavigation.put(type.navigationType(), type);
+            session.setActiveType(type);
+            title.setText(Component.translatable(type.translationKey()));
+            showWorkstationPanel(panels, type);
+            updateWorkstationButtons(workstationButtons, type);
+            modeButton.setDisplay(type.supportsShaped());
             modeButton.setText(Component.translatable(session.isShaped()
                     ? "kubejs_recipe_ui.action.shaped"
                     : "kubejs_recipe_ui.action.shapeless"));
@@ -492,7 +605,20 @@ public final class RecipeEditorUi {
             if (type == null) {
                 return;
             }
-            selectedAe2Type[0] = type;
+            selectedTypesByNavigation.put(type.navigationType(), type);
+            session.setActiveType(type);
+            title.setText(Component.translatable(type.translationKey()));
+            showWorkstationPanel(panels, type);
+            updateWorkstationButtons(workstationButtons, type);
+            modeButton.setDisplay(false);
+        });
+
+        mekanismTypeSelector.setOnValueChanged(value -> {
+            var type = mekanismTypeByDisplay.get(value);
+            if (type == null) {
+                return;
+            }
+            selectedTypesByNavigation.put(type.navigationType(), type);
             session.setActiveType(type);
             title.setText(Component.translatable(type.translationKey()));
             showWorkstationPanel(panels, type);
@@ -501,22 +627,20 @@ public final class RecipeEditorUi {
         });
 
         // JEI 转移回调同时更新会话和已经挂载的槽位控件。
-        var jeiBridge = new RecipeEditorJeiBridge((
-                type,
-                inputs,
-                output,
-                sourceInfo,
-                shaped,
-                craftingWidth,
-                craftingHeight,
-                experience,
-                cookingTime,
-                extendedSettings,
-                ae2Settings
-        ) -> {
+        var jeiBridge = new RecipeEditorJeiBridge(data -> {
+            var type = data.type();
+            var inputs = data.inputs();
+            var output = data.output();
+            var sourceInfo = data.sourceInfo();
+            var shaped = data.shaped();
+            var craftingWidth = data.craftingWidth();
+            var craftingHeight = data.craftingHeight();
+            var experience = data.experience();
+            var cookingTime = data.cookingTime();
             session.setActiveType(type);
             session.setSourceInfo(sourceInfo);
             session.setShaped(shaped);
+            session.setSettings(type, data.settings());
             if (type.isCooking()) {
                 session.setExperience(type, experience);
                 session.setCookingTime(type, cookingTime);
@@ -533,23 +657,37 @@ public final class RecipeEditorUi {
                     field.setText(Integer.toString(cookingTime));
                 }
             }
-            session.setExtendedSettings(type, extendedSettings);
-            session.setAe2Settings(type, ae2Settings);
-            if (type.isExtendedTable()) {
-                selectedExtendedTable[0] = type;
-                extendedTableSelector.setSelected(extendedTableDisplay.get(type));
+            if (type.isVanilla()) {
+                selectedTypesByNavigation.put(type.navigationType(), type);
+                vanillaTypeSelector.setSelected(vanillaTypeDisplay.get(type));
             }
-            extendedTableSelectorRow.setDisplay(type.isExtendedTable());
+            vanillaTypeSelectorRow.setDisplay(type.isVanilla());
+            if (type.isExtendedCrafting()) {
+                selectedTypesByNavigation.put(type.navigationType(), type);
+                extendedTypeSelector.setSelected(extendedTypeDisplay.get(type));
+            }
+            extendedTypeSelectorRow.setDisplay(type.isExtendedCrafting());
             if (type.isAe2()) {
-                selectedAe2Type[0] = type;
+                var ae2Settings = data.settings().require(Ae2RecipeSettings.class);
+                selectedTypesByNavigation.put(type.navigationType(), type);
                 ae2TypeSelector.setSelected(ae2TypeDisplay.get(type));
                 updateAe2Fields(root, type, ae2Settings);
             }
             ae2TypeSelectorRow.setDisplay(type.isAe2());
-            updateNumericField(root, extendedFieldId(type, "power_cost"), extendedSettings.powerCost());
-            updateNumericField(root, extendedFieldId(type, "power_rate"), extendedSettings.powerRate());
-            updateNumericField(root, extendedFieldId(type, "ingredient_count"), extendedSettings.ingredientCount());
-            updateNumericField(root, extendedFieldId(type, "crafting_time"), extendedSettings.craftingTime());
+            if (type.isMekanism()) {
+                var mekanismSettings = data.settings().require(MekanismRecipeSettings.class);
+                selectedTypesByNavigation.put(type.navigationType(), type);
+                mekanismTypeSelector.setSelected(mekanismTypeDisplay.get(type));
+                updateMekanismFields(root, type, mekanismSettings);
+            }
+            mekanismTypeSelectorRow.setDisplay(type.isMekanism());
+            if (type.isExtendedCrafting()) {
+                var extendedSettings = data.settings().require(ExtendedRecipeSettings.class);
+                updateNumericField(root, extendedFieldId(type, "power_cost"), extendedSettings.powerCost());
+                updateNumericField(root, extendedFieldId(type, "power_rate"), extendedSettings.powerRate());
+                updateNumericField(root, extendedFieldId(type, "ingredient_count"), extendedSettings.ingredientCount());
+                updateNumericField(root, extendedFieldId(type, "crafting_time"), extendedSettings.craftingTime());
+            }
             for (var index = 0; index < type.inputCount(); index++) {
                 session.setInputStack(type, index, ItemStack.EMPTY);
             }
@@ -584,6 +722,12 @@ public final class RecipeEditorUi {
                     : root.getModularUI().getElementById(outputSlotId(type));
             if (outputElement instanceof ItemSlot outputSlot) {
                 outputSlot.setItem(output);
+            }
+            var outputCountElement = root.getModularUI() == null
+                    ? null
+                    : root.getModularUI().getElementById(outputCountId(type));
+            if (outputCountElement instanceof TextField field && !output.isEmpty()) {
+                field.setText(Integer.toString(output.getCount()));
             }
             recipeIdField.setText(sourceInfo.id());
             sourceIdValue.setText(Component.literal(sourceDisplayValue(sourceInfo.id())));
@@ -730,15 +874,39 @@ public final class RecipeEditorUi {
                   background: sdf(#fff3f3f3, 1, 1, #ff777777);
                 }
 
+                .kru_slot_count {
+                  font-size: 8;
+                  text-color: #202020;
+                }
+
                 item-slot, .item-slot_bg {
                   background: built-in(ui-mc:RECT_1);
                 }
                 """);
 
-        return new ModularUI(
-                UI.of(root, StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MC)),
-                holder.player
+        // 外层视口使用实际屏幕尺寸，内部编辑器保持设计尺寸并在小窗口中等比缩放。
+        var viewport = new UIElement();
+        viewport.layout(style -> style.width(EDITOR_WIDTH).height(EDITOR_HEIGHT));
+        viewport.lss("flex-direction", "row");
+        viewport.lss("align-items", "center");
+        viewport.lss("justify-content", "center");
+        viewport.addChild(root);
+
+        var ui = UI.of(
+                viewport,
+                java.util.List.of(StylesheetManager.INSTANCE.getStylesheetSafe(StylesheetManager.MC)),
+                screenSize -> {
+                    var viewportWidth = Math.min(EDITOR_WIDTH, Math.max(1, screenSize.getWidth() - SCREEN_MARGIN * 2));
+                    var viewportHeight = Math.min(EDITOR_HEIGHT, Math.max(1, screenSize.getHeight() - SCREEN_MARGIN * 2));
+                    var scale = Math.min(
+                            viewportWidth / (float) EDITOR_WIDTH,
+                            viewportHeight / (float) EDITOR_HEIGHT
+                    );
+                    root.transform(transform -> transform.pivot(0.5F, 0.5F).scale(scale));
+                    return Size.of(viewportWidth, viewportHeight);
+                }
         );
+        return new ModularUI(ui, holder.player);
     }
 
     /** 只显示当前工作站对应的编辑面板。 */
@@ -755,64 +923,25 @@ public final class RecipeEditorUi {
             WorkstationType activeType
     ) {
         buttons.forEach((type, button) -> {
-            var selected = type == activeType
-                    || type == WorkstationType.EXTENDED_BASIC_TABLE && activeType.isExtendedTable()
-                    || type == WorkstationType.AE2_CHARGER && activeType.isAe2();
+            var selected = type == activeType.navigationType();
             button.setActive(!selected);
         });
     }
 
-    /** @return Extended Crafting 工作台等级下拉框使用的简短翻译键 */
-    private static String extendedTableLevelTranslationKey(WorkstationType type) {
-        return switch (type) {
-            case EXTENDED_BASIC_TABLE -> "kubejs_recipe_ui.extended.table_level.basic";
-            case EXTENDED_ADVANCED_TABLE -> "kubejs_recipe_ui.extended.table_level.advanced";
-            case EXTENDED_ELITE_TABLE -> "kubejs_recipe_ui.extended.table_level.elite";
-            case EXTENDED_ULTIMATE_TABLE -> "kubejs_recipe_ui.extended.table_level.ultimate";
-            default -> throw new IllegalArgumentException("不是 Extended Crafting 工作台类型: " + type);
-        };
-    }
-
-    /** 根据工作站类型分派到对应的原版风格面板构建器。 */
-    private static UIElement createWorkstationPanel(
-            UIElement root,
-            BlockUIMenuType.BlockUIHolder holder,
-            RecipeEditorSession session,
-            WorkstationType type
-    ) {
-        return switch (type) {
-            case CRAFTING -> createCraftingPanel(root, holder, session);
-            case FURNACE, SMOKER, BLAST_FURNACE -> createCookingPanel(root, holder, session, type);
-            case CAMPFIRE -> createCampfirePanel(root, holder, session);
-            case STONECUTTER -> createSingleInputPanel(root, holder, session, type);
-            case SMITHING -> createSmithingPanel(root, holder, session);
-            case EXTENDED_BASIC_TABLE, EXTENDED_ADVANCED_TABLE, EXTENDED_ELITE_TABLE, EXTENDED_ULTIMATE_TABLE ->
-                    createExtendedTablePanel(root, holder, session, type);
-            case EXTENDED_COMBINATION -> createCombinationPanel(root, holder, session);
-            case EXTENDED_COMPRESSOR -> createCompressorPanel(root, holder, session);
-            case EXTENDED_ENDER_CRAFTER -> createEnderCrafterPanel(root, holder, session);
-            case EXTENDED_FLUX_CRAFTER -> createFluxCrafterPanel(root, holder, session);
-            case AE2_CHARGER -> createAe2ChargerPanel(root, holder, session);
-            case AE2_INSCRIBER -> createAe2InscriberPanel(root, holder, session);
-            case AE2_TRANSFORM -> createAe2TransformPanel(root, holder, session);
-            case AE2_ENTROPY -> createAe2EntropyPanel(session);
-        };
-    }
-
     /** 创建 3x3 工作台输入网格和输出槽。 */
-    private static UIElement createCraftingPanel(
+    static UIElement createCraftingPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
     ) {
         var panel = workstationRow(14);
         var grid = createInputGrid(root, holder, session, WorkstationType.CRAFTING, 0, 9, 3, null);
-        panel.addChildren(grid, recipeArrow(), createOutputSlot(root, holder, session, WorkstationType.CRAFTING));
+        panel.addChildren(grid, recipeArrow(), createOutputSlot(holder, session, WorkstationType.CRAFTING));
         return panel;
     }
 
     /** 创建 Extended Crafting 的 3x3、5x5、7x7 或 9x9 工作台网格。 */
-    private static UIElement createExtendedTablePanel(
+    static UIElement createExtendedTablePanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session,
@@ -823,13 +952,13 @@ public final class RecipeEditorUi {
         panel.addChildren(
                 createInputGrid(root, holder, session, type, 0, type.inputCount(), type.gridWidth(), null),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
         return panel;
     }
 
     /** 创建组合合成的中心材料、48 个基座材料以及能量参数。 */
-    private static UIElement createCombinationPanel(
+    static UIElement createCombinationPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -845,14 +974,14 @@ public final class RecipeEditorUi {
                 createInputGrid(root, holder, session, type, 1, 48, 8, "kubejs_recipe_ui.slot.pedestal"),
                 createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.center"),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
         panel.addChildren(recipe, createPowerFields(session, type, "kubejs_recipe_ui.extended.power_cost"));
         return panel;
     }
 
     /** 创建压缩机材料、催化剂、数量和能量参数。 */
-    private static UIElement createCompressorPanel(
+    static UIElement createCompressorPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -868,7 +997,7 @@ public final class RecipeEditorUi {
                 symbol("+"),
                 createInputSlot(root, holder, session, type, 1, "kubejs_recipe_ui.slot.catalyst"),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
 
         var ingredientCount = numericField(
@@ -890,7 +1019,7 @@ public final class RecipeEditorUi {
     }
 
     /** 创建末影合成器的 3x3 网格和合成时间。 */
-    private static UIElement createEnderCrafterPanel(
+    static UIElement createEnderCrafterPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -904,7 +1033,7 @@ public final class RecipeEditorUi {
         recipe.addChildren(
                 createInputGrid(root, holder, session, type, 0, 9, 3, null),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
 
         var craftingTime = numericField(
@@ -922,7 +1051,7 @@ public final class RecipeEditorUi {
     }
 
     /** 创建通量合成器的 3x3 网格和能量参数。 */
-    private static UIElement createFluxCrafterPanel(
+    static UIElement createFluxCrafterPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -936,14 +1065,14 @@ public final class RecipeEditorUi {
         recipe.addChildren(
                 createInputGrid(root, holder, session, type, 0, 9, 3, null),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
         panel.addChildren(recipe, createPowerFields(session, type, "kubejs_recipe_ui.extended.power_required"));
         return panel;
     }
 
     /** 完整复刻 AE2 充能器 JEI 分类的 130x50 布局。 */
-    private static UIElement createAe2ChargerPanel(
+    static UIElement createAe2ChargerPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -959,7 +1088,7 @@ public final class RecipeEditorUi {
         input.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(31).top(8));
         var arrow = ae2JeiSprite(0, 17, 24, 17);
         arrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(52).top(8));
-        var output = createOutputSlot(root, holder, session, type);
+        var output = createOutputSlot(holder, session, type);
         output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(81).top(8));
         var crank = ae2JeiItemSlot(null, optionalItemStack("ae2:crank"));
         crank.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(3).top(30));
@@ -978,7 +1107,7 @@ public final class RecipeEditorUi {
     }
 
     /** 复刻 AE2 压印器 JEI 分类，并将编辑器专用模式控件放在分类下方。 */
-    private static UIElement createAe2InscriberPanel(
+    static UIElement createAe2InscriberPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -998,7 +1127,7 @@ public final class RecipeEditorUi {
         middle.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(22).top(24));
         var bottom = createInputSlot(root, holder, session, type, 2, "kubejs_recipe_ui.ae2.slot.bottom");
         bottom.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(1).top(47));
-        var output = createOutputSlot(root, holder, session, type);
+        var output = createOutputSlot(holder, session, type);
         output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(69).top(24));
         var progress = ae2JeiSprite(72, 0, 6, 18);
         progress.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(91).top(23));
@@ -1019,7 +1148,7 @@ public final class RecipeEditorUi {
     }
 
     /** 复刻 AE2 物品转化 JEI 分类，并在分类下方提供条件参数。 */
-    private static UIElement createAe2TransformPanel(
+    static UIElement createAe2TransformPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -1055,7 +1184,7 @@ public final class RecipeEditorUi {
         conditionPreview.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(56).top(24));
         var secondArrow = ae2JeiSprite(0, 17, 24, 17);
         secondArrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(76).top(23));
-        var output = createOutputSlot(root, holder, session, type);
+        var output = createOutputSlot(holder, session, type);
         output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(106).top(24));
         var conditionLabel = new Label();
         conditionLabel.setId(ae2FieldId(type, "transform_condition_label"));
@@ -1106,7 +1235,7 @@ public final class RecipeEditorUi {
     }
 
     /** 复刻 AE2 熵变处理 JEI 分类，并在下方编辑模式与资源。 */
-    private static UIElement createAe2EntropyPanel(RecipeEditorSession session) {
+    static UIElement createAe2EntropyPanel(RecipeEditorSession session) {
         var type = WorkstationType.AE2_ENTROPY;
         var settings = session.getAe2Settings(type);
         var panel = new UIElement();
@@ -1431,6 +1560,547 @@ public final class RecipeEditorUi {
         return grid;
     }
 
+    /**
+     * 按 Mekanism 配方的数据形态复用一组紧凑 LDLib2 面板。
+     * 物品继续使用可拖放槽位，流体与化学品均使用本地化下拉框。
+     */
+    static UIElement createMekanismPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type
+    ) {
+        var panel = new UIElement();
+        panel.layout(style -> style.widthPercent(100).height(180).paddingVertical(4).gapAll(4));
+        panel.lss("flex-direction", "column");
+        panel.lss("align-items", "center");
+
+        switch (type) {
+            case MEKANISM_CRUSHING, MEKANISM_ENRICHING, MEKANISM_SMELTING -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, true));
+                panel.addChild(mekanismParameterPair(
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value))
+                ));
+            }
+            case MEKANISM_COMBINING -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, true));
+                panel.addChild(mekanismParameterPair(
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.main_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value)),
+                        mekanismIntegerRow(session, type, "extra_item_input_count", "kubejs_recipe_ui.mekanism.extra_input_count",
+                                session.getMekanismSettings(type).extraItemInputCount(), 1,
+                                (settings, value) -> settings.withExtraItemInputCount(value))
+                ));
+            }
+            case MEKANISM_CHEMICAL_INFUSING, MEKANISM_PIGMENT_MIXING -> {
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.left_chemical_input"),
+                        mekanismResourceRow(session, type, ResourceField.SECONDARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.right_chemical_input")
+                ));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_output")
+                ));
+            }
+            case MEKANISM_SEPARATING -> {
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.FLUID_INPUT,
+                                "kubejs_recipe_ui.mekanism.fluid_input"),
+                        mekanismIntegerRow(session, type, "energy_multiplier", "kubejs_recipe_ui.mekanism.energy_multiplier",
+                                session.getMekanismSettings(type).energyMultiplier(), 1,
+                                (settings, value) -> settings.withEnergyMultiplier(value))
+                ));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                                "kubejs_recipe_ui.mekanism.left_chemical_output"),
+                        mekanismResourceRow(session, type, ResourceField.SECONDARY_CHEMICAL_OUTPUT,
+                                "kubejs_recipe_ui.mekanism.right_chemical_output")
+                ));
+            }
+            case MEKANISM_WASHING -> {
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.FLUID_INPUT,
+                                "kubejs_recipe_ui.mekanism.fluid_input"),
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_input")
+                ));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_output")
+                ));
+            }
+            case MEKANISM_EVAPORATING -> panel.addChild(mekanismParameterPair(
+                    mekanismResourceRow(session, type, ResourceField.FLUID_INPUT,
+                            "kubejs_recipe_ui.mekanism.fluid_input"),
+                    mekanismResourceRow(session, type, ResourceField.FLUID_OUTPUT,
+                            "kubejs_recipe_ui.mekanism.fluid_output")
+            ));
+            case MEKANISM_ACTIVATING, MEKANISM_CENTRIFUGING -> panel.addChild(mekanismParameterPair(
+                    mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                            "kubejs_recipe_ui.mekanism.chemical_input"),
+                    mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                            "kubejs_recipe_ui.mekanism.chemical_output")
+            ));
+            case MEKANISM_CRYSTALLIZING -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, true));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_input")
+                ));
+            }
+            case MEKANISM_DISSOLUTION -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, false));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_input"),
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_output")
+                ));
+                panel.addChild(mekanismParameterPair(
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value)),
+                        mekanismPerTickRow(session, type)
+                ));
+            }
+            case MEKANISM_COMPRESSING, MEKANISM_PURIFYING, MEKANISM_INJECTING,
+                    MEKANISM_METALLURGIC_INFUSING, MEKANISM_PAINTING -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, true));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_input"),
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value))
+                ));
+                panel.addChild(mekanismParameterPair(mekanismPerTickRow(session, type)));
+            }
+            case MEKANISM_NUCLEOSYNTHESIZING -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, true));
+                panel.addChild(mekanismParameterPair(
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_input"),
+                        mekanismIntegerRow(session, type, "duration", "kubejs_recipe_ui.mekanism.duration",
+                                session.getMekanismSettings(type).duration(), 1,
+                                (settings, value) -> settings.withDuration(value))
+                ));
+                panel.addChild(mekanismParameterPair(
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value)),
+                        mekanismPerTickRow(session, type)
+                ));
+            }
+            case MEKANISM_ENERGY_CONVERSION -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, false));
+                panel.addChild(mekanismParameterPair(
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value)),
+                        mekanismIntegerRow(session, type, "energy_output", "kubejs_recipe_ui.mekanism.energy_output",
+                                session.getMekanismSettings(type).energyOutput(), 1,
+                                (settings, value) -> settings.withEnergyOutput(value))
+                ));
+            }
+            case MEKANISM_CHEMICAL_CONVERSION, MEKANISM_OXIDIZING, MEKANISM_PIGMENT_EXTRACTING -> {
+                panel.addChild(mekanismItemFlow(root, holder, session, type, false));
+                panel.addChild(mekanismParameterPair(
+                        mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                                session.getMekanismSettings(type).itemInputCount(), 1,
+                                (settings, value) -> settings.withItemInputCount(value)),
+                        mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                                "kubejs_recipe_ui.mekanism.chemical_output")
+                ));
+            }
+            case MEKANISM_REACTION -> createMekanismReactionPanel(root, holder, session, type, panel);
+            case MEKANISM_ROTARY -> createMekanismRotaryPanel(session, type, panel);
+            case MEKANISM_SAWING -> createMekanismSawingPanel(root, holder, session, type, panel);
+            default -> throw new IllegalArgumentException("不是 Mekanism 工作站: " + type);
+        }
+        return panel;
+    }
+
+    /** 创建加压反应室的三输入、双输出和处理参数。 */
+    private static void createMekanismReactionPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type,
+            UIElement panel
+    ) {
+        panel.addChild(mekanismItemFlow(root, holder, session, type, true));
+        panel.addChild(mekanismParameterPair(
+                mekanismResourceRow(session, type, ResourceField.FLUID_INPUT,
+                        "kubejs_recipe_ui.mekanism.fluid_input"),
+                mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                        "kubejs_recipe_ui.mekanism.chemical_input")
+        ));
+        panel.addChild(mekanismParameterPair(
+                mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                        "kubejs_recipe_ui.mekanism.chemical_output"),
+                mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                        session.getMekanismSettings(type).itemInputCount(), 1,
+                        (settings, value) -> settings.withItemInputCount(value))
+        ));
+        panel.addChild(mekanismParameterPair(
+                mekanismIntegerRow(session, type, "duration", "kubejs_recipe_ui.mekanism.duration",
+                        session.getMekanismSettings(type).duration(), 1,
+                        (settings, value) -> settings.withDuration(value)),
+                mekanismIntegerRow(session, type, "energy_required", "kubejs_recipe_ui.mekanism.energy_required",
+                        session.getMekanismSettings(type).energyRequired(), 0,
+                        (settings, value) -> settings.withEnergyRequired(value))
+        ));
+    }
+
+    /** 创建旋转式冷凝机的方向选择和双向资源字段。 */
+    private static void createMekanismRotaryPanel(
+            RecipeEditorSession session,
+            WorkstationType type,
+            UIElement panel
+    ) {
+        var settings = session.getMekanismSettings(type);
+        var mode = translatedSelector(
+                MekanismRecipeSettings.RotaryMode.values(),
+                settings.rotaryMode(),
+                MekanismRecipeSettings.RotaryMode::translationKey,
+                value -> session.setMekanismSettings(type, session.getMekanismSettings(type).withRotaryMode(value))
+        );
+        mode.setId(mekanismFieldId(type, "rotary_mode"));
+        var modeRow = labeledField("kubejs_recipe_ui.mekanism.rotary_mode", mode);
+        modeRow.layout(style -> style.width(220).height(20));
+        panel.addChild(modeRow);
+        panel.addChild(mekanismParameterPair(
+                mekanismResourceRow(session, type, ResourceField.FLUID_INPUT,
+                        "kubejs_recipe_ui.mekanism.fluid_input"),
+                mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_OUTPUT,
+                        "kubejs_recipe_ui.mekanism.chemical_output")
+        ));
+        panel.addChild(mekanismParameterPair(
+                mekanismResourceRow(session, type, ResourceField.PRIMARY_CHEMICAL_INPUT,
+                        "kubejs_recipe_ui.mekanism.chemical_input"),
+                mekanismResourceRow(session, type, ResourceField.FLUID_OUTPUT,
+                        "kubejs_recipe_ui.mekanism.fluid_output")
+        ));
+    }
+
+    /** 创建精密锯木机主产物、副产物和概率参数。 */
+    private static void createMekanismSawingPanel(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type,
+            UIElement panel
+    ) {
+        var recipe = workstationRow(8);
+        recipe.layout(style -> style.widthPercent(100).height(46).gapAll(8));
+        recipe.addChildren(
+                createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.ingredient"),
+                recipeArrow(),
+                createOutputSlot(holder, session, type),
+                symbol("+"),
+                createMekanismSecondaryOutputSlot(holder, session, type)
+        );
+        panel.addChild(recipe);
+        panel.addChild(mekanismParameterPair(
+                mekanismIntegerRow(session, type, "item_input_count", "kubejs_recipe_ui.mekanism.item_input_count",
+                        session.getMekanismSettings(type).itemInputCount(), 1,
+                        (settings, value) -> settings.withItemInputCount(value)),
+                mekanismSecondaryChanceRow(session, type)
+        ));
+    }
+
+    /** 创建 Mekanism 面板顶部的物品输入、JEI 箭头和可选物品输出。 */
+    private static UIElement mekanismItemFlow(
+            UIElement root,
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type,
+            boolean showOutput
+    ) {
+        var row = workstationRow(8);
+        row.layout(style -> style.widthPercent(100).height(46).gapAll(8));
+        for (var index = 0; index < type.inputCount(); index++) {
+            if (index > 0) {
+                row.addChild(symbol("+"));
+            }
+            row.addChild(createInputSlot(root, holder, session, type, index, "kubejs_recipe_ui.slot.ingredient"));
+        }
+        row.addChild(recipeArrow());
+        if (showOutput) {
+            row.addChild(createOutputSlot(holder, session, type));
+        }
+        return row;
+    }
+
+    /** 将一到两个 Mekanism 参数控件并排放置。 */
+    private static UIElement mekanismParameterPair(UIElement... children) {
+        var row = new UIElement();
+        row.layout(style -> style.widthPercent(100).height(22).gapAll(4));
+        row.lss("flex-direction", "row");
+        row.lss("justify-content", "center");
+        row.addChildren(children);
+        return row;
+    }
+
+    /** 创建资源选择器或 ID/标签输入框，并附带数量字段。 */
+    private static UIElement mekanismResourceRow(
+            RecipeEditorSession session,
+            WorkstationType type,
+            ResourceField resourceField,
+            String labelKey
+    ) {
+        var current = session.getMekanismSettings(type).resource(resourceField);
+        java.util.function.Consumer<String> resourceListener = value -> {
+            var settings = session.getMekanismSettings(type);
+            var old = settings.resource(resourceField);
+            session.setMekanismSettings(type, settings.withResource(resourceField, new ResourceStack(value, old.amount())));
+        };
+
+        UIElement resourceControl;
+        if (isFluidField(resourceField)) {
+            resourceControl = mekanismFluidSelector(current.id(), resourceListener);
+        } else {
+            resourceControl = mekanismChemicalSelector(current.id(), resourceListener);
+        }
+        resourceControl.setId(mekanismFieldId(
+                type,
+                resourceField.name().toLowerCase(java.util.Locale.ROOT) + "_id"
+        ));
+        resourceControl.layout(style -> style.flex(1).height(20));
+
+        var amount = numericField(Integer.toString(current.amount()), 1, Integer.MAX_VALUE, 34);
+        amount.setId(mekanismFieldId(type, resourceField.name().toLowerCase(java.util.Locale.ROOT) + "_amount"));
+        amount.registerValueListener(value -> {
+            var settings = session.getMekanismSettings(type);
+            var old = settings.resource(resourceField);
+            session.setMekanismSettings(type, settings.withResource(
+                    resourceField,
+                    new ResourceStack(old.id(), parseInt(value, old.amount()))
+            ));
+        });
+
+        var row = new UIElement();
+        row.layout(style -> style.width(166).height(20).gapAll(2));
+        row.lss("flex-direction", "row");
+        row.lss("align-items", "center");
+        var label = fieldLabel(labelKey);
+        label.layout(style -> style.width(46).height(10));
+        row.addChildren(label, resourceControl, amount);
+        row.style(style -> style.tooltips(Component.translatable(labelKey)));
+        return row;
+    }
+
+    /** 创建显示本地化名称、内部保存注册 ID 的流体下拉框。 */
+    private static Selector<String> mekanismFluidSelector(
+            String selectedId,
+            java.util.function.Consumer<String> listener
+    ) {
+        var candidates = new ArrayList<>(BuiltInRegistries.FLUID.keySet().stream()
+                .filter(identifier -> {
+                    var fluid = BuiltInRegistries.FLUID.getValue(identifier);
+                    return fluid != null && fluid != Fluids.EMPTY && fluid.defaultFluidState().isSource();
+                })
+                .map(Identifier::toString)
+                .sorted(Comparator.comparing(RecipeEditorUi::fluidDisplayName).thenComparing(value -> value))
+                .toList());
+        if (!selectedId.isBlank() && !candidates.contains(selectedId)) {
+            candidates.addFirst(selectedId);
+        }
+
+        var selector = new Selector<String>();
+        selector.dialog.style(style -> style.zIndex(200));
+        selector.setCandidateUIProvider(RecipeEditorUi::fluidOptionLabel);
+        selector.setCandidates(candidates);
+        selector.layout(style -> style.width(82).height(20));
+        if (!selectedId.isBlank()) {
+            selector.setSelected(selectedId, false);
+        } else if (!candidates.isEmpty()) {
+            selector.setSelected(candidates.getFirst(), false);
+        }
+        selector.setOnValueChanged(listener);
+        return selector;
+    }
+
+    /** 创建显示本地化名称、内部保存注册 ID 的 Mekanism 化学品下拉框。 */
+    private static Selector<String> mekanismChemicalSelector(
+            String selectedId,
+            java.util.function.Consumer<String> listener
+    ) {
+        var translationKeys = mekanismChemicalTranslationKeys();
+        var candidates = new ArrayList<>(translationKeys.keySet());
+        if (!selectedId.isBlank() && !candidates.contains(selectedId)) {
+            candidates.addFirst(selectedId);
+        }
+
+        var selector = new Selector<String>();
+        selector.dialog.style(style -> style.zIndex(200));
+        selector.setCandidateUIProvider(id -> chemicalOptionLabel(id, translationKeys));
+        selector.setCandidates(candidates);
+        selector.layout(style -> style.width(82).height(20));
+        if (!selectedId.isBlank()) {
+            selector.setSelected(selectedId, false);
+        } else if (!candidates.isEmpty()) {
+            selector.setSelected(candidates.getFirst(), false);
+        }
+        selector.setOnValueChanged(listener);
+        return selector;
+    }
+
+    /**
+     * 通过反射读取 Mekanism 统一化学品注册表，避免可选模组未安装时产生类加载错误。
+     * 注册表涵盖气体、灌注物、颜料和浆液，也包含其他模组扩展的化学品。
+     */
+    private static Map<String, String> mekanismChemicalTranslationKeys() {
+        var cached = mekanismChemicalTranslationKeys;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (RecipeEditorUi.class) {
+            cached = mekanismChemicalTranslationKeys;
+            if (cached != null) {
+                return cached;
+            }
+            mekanismChemicalTranslationKeys = cached = loadMekanismChemicalTranslationKeys();
+            return cached;
+        }
+    }
+
+    private static Map<String, String> loadMekanismChemicalTranslationKeys() {
+        try {
+            var apiClass = Class.forName("mekanism.api.MekanismAPI");
+            var chemicalClass = Class.forName("mekanism.api.chemical.Chemical");
+            var registryObject = apiClass.getField("CHEMICAL_REGISTRY").get(null);
+            if (!(registryObject instanceof Registry<?> registry)) {
+                return Map.of();
+            }
+            var getTranslationKey = chemicalClass.getMethod("getTranslationKey");
+            var entries = new ArrayList<Map.Entry<String, String>>();
+            for (var entry : registry.entrySet()) {
+                var id = entry.getKey().identifier().toString();
+                if (id.equals("mekanism:empty")) {
+                    continue;
+                }
+                var translationKey = getTranslationKey.invoke(entry.getValue());
+                if (translationKey instanceof String key && !key.isBlank()) {
+                    entries.add(Map.entry(id, key));
+                }
+            }
+            entries.sort(Comparator
+                    .comparing((Map.Entry<String, String> entry) -> translate(entry.getValue()))
+                    .thenComparing(Map.Entry::getKey));
+            var result = new LinkedHashMap<String, String>();
+            entries.forEach(entry -> result.put(entry.getKey(), entry.getValue()));
+            return Collections.unmodifiableMap(result);
+        } catch (ReflectiveOperationException | LinkageError exception) {
+            LOGGER.warn("[工作台编辑器] 无法读取 Mekanism 化学品注册表", exception);
+            return Map.of();
+        }
+    }
+
+    /** @return 流体注册 ID 的本地化显示名，无法解析时回退原 ID */
+    private static String fluidDisplayName(String id) {
+        if (id == null || id.isBlank()) {
+            return "-";
+        }
+        var identifier = Identifier.tryParse(id);
+        if (identifier == null) {
+            return id;
+        }
+        var fluid = BuiltInRegistries.FLUID.getValue(identifier);
+        if (fluid == null || fluid == Fluids.EMPTY) {
+            return id;
+        }
+        return new FluidStack(fluid, 1).getHoverName().getString();
+    }
+
+    /** 创建流体下拉选项；名称用于显示，注册 ID 仅在悬停时提示。 */
+    private static Label fluidOptionLabel(String id) {
+        var label = slowRollingLabel(fluidDisplayName(id));
+        if (id != null && !id.isBlank()) {
+            label.style(style -> style.tooltips(Component.literal(id)));
+        }
+        return label;
+    }
+
+    /** 创建化学品下拉选项；实际名称来自 Mekanism 提供的翻译键。 */
+    private static Label chemicalOptionLabel(String id, Map<String, String> translationKeys) {
+        var translationKey = id == null ? null : translationKeys.get(id);
+        var displayName = translationKey == null ? (id == null || id.isBlank() ? "-" : id) : translate(translationKey);
+        var label = slowRollingLabel(displayName);
+        if (id != null && !id.isBlank()) {
+            label.style(style -> style.tooltips(Component.literal(id)));
+        }
+        return label;
+    }
+
+    private static boolean isFluidField(ResourceField resourceField) {
+        return resourceField == ResourceField.FLUID_INPUT || resourceField == ResourceField.FLUID_OUTPUT;
+    }
+
+    /** 创建一个绑定到 Mekanism 不可变设置对象的整数输入字段。 */
+    private static UIElement mekanismIntegerRow(
+            RecipeEditorSession session,
+            WorkstationType type,
+            String fieldName,
+            String labelKey,
+            int current,
+            int minimum,
+            java.util.function.BiFunction<MekanismRecipeSettings, Integer, MekanismRecipeSettings> updater
+    ) {
+        var field = numericField(Integer.toString(current), minimum, Integer.MAX_VALUE, 72);
+        field.setId(mekanismFieldId(type, fieldName));
+        field.registerValueListener(value -> {
+            var settings = session.getMekanismSettings(type);
+            session.setMekanismSettings(type, updater.apply(settings, parseInt(value, Math.max(minimum, current))));
+        });
+        var row = labeledField(labelKey, field);
+        row.layout(style -> style.width(166).height(20));
+        row.style(style -> style.tooltips(Component.translatable(labelKey)));
+        return row;
+    }
+
+    /** 创建每 tick 消耗化学品开关。 */
+    private static UIElement mekanismPerTickRow(RecipeEditorSession session, WorkstationType type) {
+        var control = new Switch();
+        control.setId(mekanismFieldId(type, "per_tick_usage"));
+        control.setOn(session.getMekanismSettings(type).perTickUsage(), false);
+        control.layout(style -> style.width(26).height(14));
+        control.setOnSwitchChanged(value -> session.setMekanismSettings(
+                type,
+                session.getMekanismSettings(type).withPerTickUsage(value)
+        ));
+        var row = new UIElement();
+        row.layout(style -> style.width(166).height(20).gapAll(4));
+        row.lss("flex-direction", "row");
+        row.lss("align-items", "center");
+        var label = fieldLabel("kubejs_recipe_ui.mekanism.per_tick_usage");
+        label.layout(style -> style.flex(1).height(10));
+        row.addChildren(label, control);
+        return row;
+    }
+
+    private static UIElement mekanismSecondaryChanceRow(RecipeEditorSession session, WorkstationType type) {
+        var current = session.getMekanismSettings(type);
+        var field = numericField(Double.toString(current.secondaryChance()), 0.0001F, 1.0F, 72);
+        field.setId(mekanismFieldId(type, "secondary_chance"));
+        field.registerValueListener(value -> {
+            var settings = session.getMekanismSettings(type);
+            session.setMekanismSettings(type, settings.withSecondaryItemOutput(
+                    settings.secondaryItemOutputId(),
+                    settings.secondaryItemOutputCount(),
+                    parseFloat(value, (float) settings.secondaryChance())
+            ));
+        });
+        var row = labeledField("kubejs_recipe_ui.mekanism.secondary_chance", field);
+        row.layout(style -> style.width(166).height(20));
+        return row;
+    }
+
     /** 创建总能量和每 tick 功率两个字段。 */
     private static UIElement createPowerFields(
             RecipeEditorSession session,
@@ -1457,7 +2127,7 @@ public final class RecipeEditorUi {
     }
 
     /** 创建熔炉类面板，包括输入、燃料预览、输出、经验和烹饪时间。 */
-    private static UIElement createCookingPanel(
+    static UIElement createCookingPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session,
@@ -1486,7 +2156,7 @@ public final class RecipeEditorUi {
         fuel.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(56).top(53));
         var arrow = recipeArrow();
         arrow.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(79).top(34));
-        var output = createOutputSlot(root, holder, session, type);
+        var output = createOutputSlot(holder, session, type);
         output.layout(style -> style.positionType(TaffyPosition.ABSOLUTE).left(116).top(35));
         furnaceArea.addChildren(input, fuel, arrow, output);
 
@@ -1536,7 +2206,7 @@ public final class RecipeEditorUi {
     }
 
     /** 创建营火烹饪面板：营火不需要燃料槽，但保留经验与烹饪时间设置。 */
-    private static UIElement createCampfirePanel(
+    static UIElement createCampfirePanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -1558,7 +2228,7 @@ public final class RecipeEditorUi {
         recipe.addChildren(
                 createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.ingredient"),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
 
         var values = new UIElement();
@@ -1575,7 +2245,7 @@ public final class RecipeEditorUi {
     }
 
     /** 创建切石机使用的单输入配方面板。 */
-    private static UIElement createSingleInputPanel(
+    static UIElement createSingleInputPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session,
@@ -1585,13 +2255,13 @@ public final class RecipeEditorUi {
         panel.addChildren(
                 createInputSlot(root, holder, session, type, 0, "kubejs_recipe_ui.slot.ingredient"),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
         return panel;
     }
 
     /** 创建锻造台的模板、基础物品、追加材料和输出槽布局。 */
-    private static UIElement createSmithingPanel(
+    static UIElement createSmithingPanel(
             UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session
@@ -1605,7 +2275,7 @@ public final class RecipeEditorUi {
                 symbol("+"),
                 createInputSlot(root, holder, session, type, 2, "kubejs_recipe_ui.slot.addition"),
                 recipeArrow(),
-                createOutputSlot(root, holder, session, type)
+                createOutputSlot(holder, session, type)
         );
         return panel;
     }
@@ -1675,9 +2345,8 @@ public final class RecipeEditorUi {
         return slot;
     }
 
-    /** 创建支持复制光标物品、清空和数量设置的输出幻影槽。 */
+    /** 创建带可见数量输入框的输出幻影槽，并与玩家光标和 JEI 回填同步。 */
     private static ItemSlot createOutputSlot(
-            UIElement root,
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session,
             WorkstationType type
@@ -1686,12 +2355,48 @@ public final class RecipeEditorUi {
         output.xeiPhantom();
         output.setId(outputSlotId(type));
         output.layout(style -> style.width(SLOT_SIZE).height(SLOT_SIZE));
+        output.setOverflowVisible(true);
         output.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.slot.output")));
-        output.registerValueListener(stack -> session.setOutputStack(type, stack));
+
+        var countField = numericField(
+                Integer.toString(Math.max(1, session.getOutputStack(type).getCount())),
+                1,
+                99,
+                32
+        );
+        countField.setId(outputCountId(type));
+        countField.addClass("kru_slot_count");
+        countField.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(-7)
+                .top(20)
+                .width(32)
+                .height(14));
+        countField.style(style -> style
+                .zIndex(20)
+                .tooltips(Component.translatable("kubejs_recipe_ui.output.count")));
+        countField.registerValueListener(value -> {
+            if (!session.getOutputStack(type).isEmpty()) {
+                session.setOutputCount(type, parseInt(value, 1));
+            }
+        });
+
+        output.registerValueListener(stack -> {
+            session.setOutputStack(type, stack);
+            if (stack != null && !stack.isEmpty()) {
+                countField.setText(Integer.toString(stack.getCount()));
+            }
+        });
         output.bind(DataBindingBuilder.itemStack(
                 () -> session.getOutputStack(type),
-                stack -> session.setOutputStack(type, stack)
+                stack -> {
+                    session.setOutputStack(type, stack);
+                    if (stack != null && !stack.isEmpty()) {
+                        countField.setText(Integer.toString(stack.getCount()));
+                    }
+                }
         ).build());
+        output.addChild(countField);
         output.addEventListener("mouseDown", event -> {
             var carried = holder.player.containerMenu.getCarried();
             if (event.button == 0 && !carried.isEmpty()) {
@@ -1704,26 +2409,110 @@ public final class RecipeEditorUi {
                 event.stopImmediatePropagation();
                 output.setItem(ItemStack.EMPTY);
                 LOGGER.info("[工作台编辑器] {} 左键清空输出槽位", type);
-                return;
             }
-            if (event.button != 1) {
-                return;
-            }
-            if (session.getOutputStack(type).isEmpty()) {
-                LOGGER.info("[工作台编辑器] {} 右键输出槽位: 空槽位，不打开数量设置", type);
-                return;
-            }
-            event.stopImmediatePropagation();
-            showOutputSettings(root, output, session);
-        }, true);
+        });
         return output;
     }
 
-    /** 创建复用 LDLib2 原版风格纹理的配方箭头。 */
+    /** 创建精密锯木机副产物幻影槽，并同步副产物 ID、数量和 JEI 回填。 */
+    private static ItemSlot createMekanismSecondaryOutputSlot(
+            BlockUIMenuType.BlockUIHolder holder,
+            RecipeEditorSession session,
+            WorkstationType type
+    ) {
+        var output = new ItemSlot();
+        output.xeiPhantom();
+        output.setId(mekanismFieldId(type, "secondary_item_output_slot"));
+        output.layout(style -> style.width(SLOT_SIZE).height(SLOT_SIZE));
+        output.setOverflowVisible(true);
+        output.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.mekanism.secondary_output")));
+
+        var settings = session.getMekanismSettings(type);
+        var countField = numericField(
+                Integer.toString(settings.secondaryItemOutputCount()),
+                1,
+                99,
+                32
+        );
+        countField.setId(mekanismFieldId(type, "secondary_item_output_count"));
+        countField.addClass("kru_slot_count");
+        countField.layout(style -> style
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(-7)
+                .top(20)
+                .width(32)
+                .height(14));
+        countField.style(style -> style
+                .zIndex(20)
+                .tooltips(Component.translatable("kubejs_recipe_ui.mekanism.secondary_count")));
+        countField.registerValueListener(value -> {
+            var current = session.getMekanismSettings(type);
+            session.setMekanismSettings(type, current.withSecondaryItemOutput(
+                    current.secondaryItemOutputId(),
+                    parseInt(value, 1),
+                    current.secondaryChance()
+            ));
+        });
+
+        java.util.function.Consumer<ItemStack> updateSecondaryOutput = stack -> {
+            var current = session.getMekanismSettings(type);
+            if (stack == null || stack.isEmpty()) {
+                session.setMekanismSettings(type, current.withSecondaryItemOutput(
+                        "",
+                        current.secondaryItemOutputCount(),
+                        current.secondaryChance()
+                ));
+                return;
+            }
+            var itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            var count = Math.max(1, stack.getCount());
+            session.setMekanismSettings(type, current.withSecondaryItemOutput(
+                    itemId.toString(),
+                    count,
+                    current.secondaryChance()
+            ));
+            countField.setText(Integer.toString(count));
+        };
+
+        output.registerValueListener(updateSecondaryOutput);
+        output.bind(DataBindingBuilder.itemStack(
+                () -> mekanismSecondaryOutputStack(session.getMekanismSettings(type)),
+                updateSecondaryOutput
+        ).build());
+        output.addChild(countField);
+        output.addEventListener("mouseDown", event -> {
+            var carried = holder.player.containerMenu.getCarried();
+            if (event.button == 0 && !carried.isEmpty()) {
+                event.stopImmediatePropagation();
+                output.setItem(carried.copy());
+                LOGGER.info("[工作台编辑器] {} 从玩家光标复制副产物: {} x{}", type, carried.getItem(), carried.getCount());
+                return;
+            }
+            if (event.button == 0) {
+                event.stopImmediatePropagation();
+                output.setItem(ItemStack.EMPTY);
+                LOGGER.info("[工作台编辑器] {} 左键清空副产物槽位", type);
+            }
+        });
+        return output;
+    }
+
+    /** 将锯木机副产物设置转换为幻影槽展示的物品堆。 */
+    private static ItemStack mekanismSecondaryOutputStack(MekanismRecipeSettings settings) {
+        var stack = optionalItemStack(settings.secondaryItemOutputId());
+        if (!stack.isEmpty()) {
+            stack.setCount(settings.secondaryItemOutputCount());
+        }
+        return stack;
+    }
+
+    /** 直接使用 JEI 的配方箭头资源；未安装 JEI 时保留通用箭头作为回退。 */
     private static UIElement recipeArrow() {
         var arrow = new UIElement();
-        arrow.layout(style -> style.width(24).height(16));
-        arrow.style(style -> style.background(Icons.RIGHT_ARROW_NO_BAR));
+        arrow.layout(style -> style.width(22).height(16));
+        arrow.style(style -> style.background(ModList.get().isLoaded("jei")
+                ? SpriteTexture.of(JEI_RECIPE_ARROW_TEXTURE).setSprite(0, 0, 22, 16)
+                : Icons.RIGHT_ARROW_NO_BAR));
         return arrow;
     }
 
@@ -1735,6 +2524,11 @@ public final class RecipeEditorUi {
     /** 生成 JEI 回填时定位输出槽所需的稳定元素 ID。 */
     private static String outputSlotId(WorkstationType type) {
         return "kubejs_recipe_ui#output_" + type.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** 生成 JEI 回填时定位输出数量框所需的稳定元素 ID。 */
+    private static String outputCountId(WorkstationType type) {
+        return "kubejs_recipe_ui#output_count_" + type.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     /** 生成 JEI 回填经验输入框所需的稳定元素 ID。 */
@@ -1761,6 +2555,46 @@ public final class RecipeEditorUi {
                 + type.name().toLowerCase(java.util.Locale.ROOT)
                 + "_"
                 + fieldName;
+    }
+
+    /** 生成 Mekanism 专属控件在 JEI 回填时使用的稳定元素 ID。 */
+    private static String mekanismFieldId(WorkstationType type, String fieldName) {
+        return "kubejs_recipe_ui#mekanism_"
+                + type.name().toLowerCase(java.util.Locale.ROOT)
+                + "_"
+                + fieldName;
+    }
+
+    /** 将 JEI 读取到的 Mekanism 资源和机器参数同步到已经挂载的 LDLib2 控件。 */
+    private static void updateMekanismFields(
+            UIElement root,
+            WorkstationType type,
+            MekanismRecipeSettings settings
+    ) {
+        for (var resourceField : ResourceField.values()) {
+            var resource = settings.resource(resourceField);
+            var fieldName = resourceField.name().toLowerCase(java.util.Locale.ROOT);
+            updateSelector(root, mekanismFieldId(type, fieldName + "_id"), resource.id());
+            updateNumericField(root, mekanismFieldId(type, fieldName + "_amount"), resource.amount());
+        }
+        updateNumericField(root, mekanismFieldId(type, "item_input_count"), settings.itemInputCount());
+        updateNumericField(root, mekanismFieldId(type, "extra_item_input_count"), settings.extraItemInputCount());
+        updateNumericField(root, mekanismFieldId(type, "energy_output"), settings.energyOutput());
+        updateNumericField(root, mekanismFieldId(type, "duration"), settings.duration());
+        updateNumericField(root, mekanismFieldId(type, "energy_required"), settings.energyRequired());
+        updateNumericField(root, mekanismFieldId(type, "energy_multiplier"), settings.energyMultiplier());
+        var secondaryOutput = getElement(root, mekanismFieldId(type, "secondary_item_output_slot"));
+        if (secondaryOutput instanceof ItemSlot slot) {
+            slot.setItem(mekanismSecondaryOutputStack(settings));
+        }
+        updateNumericField(root, mekanismFieldId(type, "secondary_item_output_count"), settings.secondaryItemOutputCount());
+        updateTextField(root, mekanismFieldId(type, "secondary_chance"), Double.toString(settings.secondaryChance()));
+        updateSelector(
+                root,
+                mekanismFieldId(type, "rotary_mode"),
+                translate(settings.rotaryMode().translationKey())
+        );
+        updateSwitch(root, mekanismFieldId(type, "per_tick_usage"), settings.perTickUsage());
     }
 
     /** 将 AE2 配方对象读取到的专属参数同步到已经挂载的 LDLib2 控件。 */
@@ -1874,6 +2708,14 @@ public final class RecipeEditorUi {
         var element = root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
         if (element instanceof TextField field) {
             field.setText(value);
+        }
+    }
+
+    /** JEI 回填时同步修改已经挂载到 ModularUI 的开关。 */
+    private static void updateSwitch(UIElement root, String id, boolean value) {
+        var element = root.getModularUI() == null ? null : root.getModularUI().getElementById(id);
+        if (element instanceof Switch control) {
+            control.setOn(value, false);
         }
     }
 
@@ -2151,41 +2993,6 @@ public final class RecipeEditorUi {
         return label;
     }
 
-    /** 打开输出数量设置弹窗，并同步更新槽位和会话。 */
-    private static void showOutputSettings(UIElement root, ItemSlot outputSlot, RecipeEditorSession session) {
-        var countField = new TextField();
-        countField.setNumbersOnlyInt(1, 99);
-        countField.setText(Integer.toString(session.getOutputStack().getCount()));
-        countField.layout(style -> style.width(110).height(20));
-
-        var content = new UIElement();
-        content.layout(style -> style
-                .widthPercent(100)
-                .paddingAll(6)
-                .gapAll(5)
-        );
-        content.lss("flex-direction", "column");
-        content.addChildren(fieldLabel("kubejs_recipe_ui.output_settings.count"), countField);
-
-        var dialog = createModal("kubejs_recipe_ui.output_settings.title", 220, 125);
-        dialog.addContent(content);
-
-        var save = actionButton(Component.translatable("gui.done"), 70);
-        captureClick(save, "保存输出数量", event -> {
-            try {
-                var count = Integer.parseInt(countField.getText());
-                session.setOutputCount(count);
-                outputSlot.setItem(session.getOutputStack());
-                dialog.close();
-            } catch (IllegalArgumentException exception) {
-                Dialog.showNotification(translate("kubejs_recipe_ui.output_settings.invalid_count"), 3.0F);
-            }
-        });
-        var cancel = actionButton(Component.translatable("gui.cancel"), 70);
-        captureClick(cancel, "取消输出数量设置", event -> dialog.close());
-        dialog.addButton(save).addButton(cancel).show(root);
-    }
-
     /** @return 原料类型对应的本地化名称 */
     private static Component modeText(IngredientSpec.Kind kind) {
         return Component.translatable(switch (kind) {
@@ -2237,6 +3044,23 @@ public final class RecipeEditorUi {
     /** 将代码编辑器的行数组合并为平台无关的换行文本。 */
     private static String editorCode(CodeEditor editor) {
         return String.join("\n", editor.getValue());
+    }
+
+    /** 创建适合浅色 JEI 风格背景的高对比 JavaScript 语法配色。 */
+    private static StyleManager createLightCodeStyle() {
+        var styleManager = new StyleManager();
+        styleManager.setDefaultStyle(codeTextStyle(0x24292F));
+        styleManager.getStyleMap().put(TokenTypes.KEYWORD.name, codeTextStyle(0x0000FF));
+        styleManager.getStyleMap().put(TokenTypes.IDENTIFIER.name, codeTextStyle(0x24292F));
+        styleManager.getStyleMap().put(TokenTypes.STRING.name, codeTextStyle(0xA31515));
+        styleManager.getStyleMap().put(TokenTypes.COMMENT.name, codeTextStyle(0x008000));
+        styleManager.getStyleMap().put(TokenTypes.NUMBER.name, codeTextStyle(0x098658));
+        styleManager.getStyleMap().put(TokenTypes.OPERATOR.name, codeTextStyle(0x24292F));
+        return styleManager;
+    }
+
+    private static Style codeTextStyle(int rgb) {
+        return Style.EMPTY.withColor(rgb);
     }
 
     /** 创建滚动速度较慢的长文本标签，确保下拉选项可读。 */

@@ -17,8 +17,9 @@ import com.blakebr0.extendedcrafting.crafting.recipe.ShapedEnderCrafterRecipe;
 import com.blakebr0.extendedcrafting.crafting.recipe.ShapedFluxCrafterRecipe;
 import com.blakebr0.extendedcrafting.crafting.recipe.ShapedTableRecipe;
 import com.github.jun8848.kubejsrecipeui.client.RecipeEditorJeiBridge;
-import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
+import com.github.jun8848.kubejsrecipeui.client.RecipeTransferData;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
+import com.github.jun8848.kubejsrecipeui.recipe.RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIContainerMenu;
@@ -183,7 +184,7 @@ final class ExtendedCraftingJeiIntegration {
                     recipe.group()
             );
             var shape = shape(recipe);
-            bridge.fill(
+            bridge.fill(new RecipeTransferData(
                     workstationType,
                     List.copyOf(inputs),
                     output,
@@ -193,9 +194,8 @@ final class ExtendedCraftingJeiIntegration {
                     shape.height(),
                     0.0F,
                     200,
-                    settingsFactory.create(recipe, workstationType),
-                    Ae2RecipeSettings.defaults()
-            );
+                    RecipeSettings.of(settingsFactory.create(recipe, workstationType))
+            ));
             return null;
         }
     }

@@ -2,10 +2,10 @@ package com.github.jun8848.kubejsrecipeui.integration.jei;
 
 import com.github.jun8848.kubejsrecipeui.KubeJsRecipeUi;
 import com.github.jun8848.kubejsrecipeui.client.RecipeEditorJeiBridge;
-import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
+import com.github.jun8848.kubejsrecipeui.client.RecipeTransferData;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
-import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
+import com.github.jun8848.kubejsrecipeui.recipe.integration.RecipeIntegrationRegistry;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIContainerMenu;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -26,7 +26,6 @@ import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.neoforged.fml.ModList;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -55,11 +54,14 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         register(registration, RecipeTypes.CAMPFIRE_COOKING, WorkstationType.CAMPFIRE);
         register(registration, RecipeTypes.STONECUTTING, WorkstationType.STONECUTTER);
         register(registration, RecipeTypes.SMITHING, WorkstationType.SMITHING);
-        if (ModList.get().isLoaded(WorkstationType.EXTENDED_CRAFTING_MOD_ID)) {
+        if (WorkstationType.EXTENDED_BASIC_TABLE.isAvailable()) {
             ExtendedCraftingJeiIntegration.register(registration);
         }
-        if (ModList.get().isLoaded(WorkstationType.AE2_MOD_ID)) {
+        if (WorkstationType.AE2_CHARGER.isAvailable()) {
             Ae2JeiIntegration.register(registration);
+        }
+        if (WorkstationType.MEKANISM_CRUSHING.isAvailable()) {
+            MekanismJeiIntegration.register(registration);
         }
     }
 
@@ -143,7 +145,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
             // 烹饪配方还需要同步 JEI 配方对象中的经验和时间，而不是沿用界面默认值。
             var experience = recipe instanceof AbstractCookingRecipe cooking ? cooking.experience() : 0.0F;
             var cookingTime = recipe instanceof AbstractCookingRecipe cooking ? cooking.cookingTime() : 200;
-            bridge.fill(
+            bridge.fill(new RecipeTransferData(
                     workstationType,
                     List.copyOf(inputs),
                     output,
@@ -153,9 +155,8 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
                     height,
                     experience,
                     cookingTime,
-                    ExtendedRecipeSettings.defaults(workstationType),
-                    Ae2RecipeSettings.defaults()
-            );
+                    RecipeIntegrationRegistry.defaultSettings(workstationType)
+            ));
             return null;
         }
     }

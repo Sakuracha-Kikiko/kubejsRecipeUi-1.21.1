@@ -62,3 +62,11 @@ reason="Enables Applied Energistics 2 recipe editors when installed."
 versionRange="[${ae2_version_range},)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="mekanism"
+type="optional"
+reason="Enables Mekanism recipe editors when installed."
+versionRange="[${mekanism_version_range},)"
+ordering="AFTER"
+side="BOTH"

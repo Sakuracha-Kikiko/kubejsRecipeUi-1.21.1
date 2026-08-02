@@ -107,6 +107,9 @@ dependencies {
     compileOnly "maven.modrinth:ae2:${ae2_version}"
     localRuntime "maven.modrinth:guideme:${guideme_version}"
     localRuntime "maven.modrinth:ae2:${ae2_version}"
+
+    // Mekanism 26.1 暂无公开构建；存在本地源码构建包时才加入开发运行环境。
+    localRuntime fileTree(dir: "libs", include: ["Mekanism-*.jar"])
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -117,6 +120,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             ldlib2_version_range   : ldlib2_version_range,
             extended_crafting_version_range: extended_crafting_version_range,
             ae2_version_range      : ae2_version_range,
+            mekanism_version_range: mekanism_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_license            : mod_license,

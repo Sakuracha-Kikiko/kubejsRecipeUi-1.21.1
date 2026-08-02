@@ -2,12 +2,15 @@ package com.github.jun8848.kubejsrecipeui.client;
 
 import com.github.jun8848.kubejsrecipeui.recipe.Ae2RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.IngredientSpec;
+import com.github.jun8848.kubejsrecipeui.recipe.MekanismRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.ExtendedRecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.OutputSpec;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDefinition;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeDeleteMode;
+import com.github.jun8848.kubejsrecipeui.recipe.RecipeSettings;
 import com.github.jun8848.kubejsrecipeui.recipe.RecipeSourceInfo;
 import com.github.jun8848.kubejsrecipeui.recipe.WorkstationType;
+import com.github.jun8848.kubejsrecipeui.recipe.integration.RecipeIntegrationRegistry;
 import com.mojang.serialization.DynamicOps;
 import dev.latvian.mods.kubejs.core.ItemStackKJS;
 import com.mojang.logging.LogUtils;
@@ -120,9 +123,9 @@ public final class RecipeEditorSession {
         );
     }
 
-    /** 修改当前输出物品数量，并执行界面允许范围校验。 */
-    public void setOutputCount(int count) {
-        var state = state(activeType);
+    /** 修改指定工作站的输出物品数量，并执行界面允许范围校验。 */
+    public void setOutputCount(WorkstationType type, int count) {
+        var state = state(type);
         var outputStack = state.outputStack;
         if (outputStack.isEmpty()) {
             throw new IllegalArgumentException("请先设置输出物品");
@@ -131,7 +134,7 @@ public final class RecipeEditorSession {
             throw new IllegalArgumentException("输出数量必须在 1 到 99 之间");
         }
         outputStack.setCount(count);
-        LOGGER.info("[工作台编辑器] 输出数量更新: {}", count);
+        LOGGER.info("[工作台编辑器] {} 输出数量更新: {}", type, count);
     }
 
     /** @return 当前工作站配方是否为有序配方 */
@@ -151,63 +154,81 @@ public final class RecipeEditorSession {
     }
 
     public int getExtendedTier(WorkstationType type) {
-        return state(type).extendedTier;
+        return getExtendedSettings(type).tier();
     }
 
     public void setExtendedTier(WorkstationType type, int tier) {
-        state(type).extendedTier = tier;
+        setExtendedSettings(type, getExtendedSettings(type).withTier(tier));
     }
 
     public int getPowerCost(WorkstationType type) {
-        return state(type).powerCost;
+        return getExtendedSettings(type).powerCost();
     }
 
     public void setPowerCost(WorkstationType type, int powerCost) {
-        state(type).powerCost = powerCost;
+        setExtendedSettings(type, getExtendedSettings(type).withPowerCost(powerCost));
     }
 
     public int getPowerRate(WorkstationType type) {
-        return state(type).powerRate;
+        return getExtendedSettings(type).powerRate();
     }
 
     public void setPowerRate(WorkstationType type, int powerRate) {
-        state(type).powerRate = powerRate;
+        setExtendedSettings(type, getExtendedSettings(type).withPowerRate(powerRate));
     }
 
     public int getIngredientCount(WorkstationType type) {
-        return state(type).ingredientCount;
+        return getExtendedSettings(type).ingredientCount();
     }
 
     public void setIngredientCount(WorkstationType type, int ingredientCount) {
-        state(type).ingredientCount = ingredientCount;
+        setExtendedSettings(type, getExtendedSettings(type).withIngredientCount(ingredientCount));
     }
 
     public int getExtendedCraftingTime(WorkstationType type) {
-        return state(type).extendedCraftingTime;
+        return getExtendedSettings(type).craftingTime();
     }
 
     public void setExtendedCraftingTime(WorkstationType type, int craftingTime) {
-        state(type).extendedCraftingTime = craftingTime;
+        setExtendedSettings(type, getExtendedSettings(type).withCraftingTime(craftingTime));
+    }
+
+    /** @return 指定 Extended Crafting 编辑器当前保存的专属参数 */
+    public ExtendedRecipeSettings getExtendedSettings(WorkstationType type) {
+        return state(type).settings.require(ExtendedRecipeSettings.class);
     }
 
     /** 批量应用 JEI 读取到的 Extended Crafting 专属参数。 */
     public void setExtendedSettings(WorkstationType type, ExtendedRecipeSettings settings) {
         var state = state(type);
-        state.extendedTier = settings.tier();
-        state.powerCost = settings.powerCost();
-        state.powerRate = settings.powerRate();
-        state.ingredientCount = settings.ingredientCount();
-        state.extendedCraftingTime = settings.craftingTime();
+        state.settings = state.settings.with(settings);
     }
 
     /** @return 指定 AE2 编辑器当前保存的专属参数 */
     public Ae2RecipeSettings getAe2Settings(WorkstationType type) {
-        return state(type).ae2Settings;
+        return state(type).settings.require(Ae2RecipeSettings.class);
     }
 
     /** 保存界面编辑或 JEI 回填得到的 AE2 专属参数。 */
     public void setAe2Settings(WorkstationType type, Ae2RecipeSettings settings) {
-        state(type).ae2Settings = java.util.Objects.requireNonNull(settings, "settings");
+        var state = state(type);
+        state.settings = state.settings.with(settings);
+    }
+
+    /** @return 指定 Mekanism 编辑器当前保存的流体、化学品和机器参数 */
+    public MekanismRecipeSettings getMekanismSettings(WorkstationType type) {
+        return state(type).settings.require(MekanismRecipeSettings.class);
+    }
+
+    /** 保存界面编辑或 JEI 回填得到的 Mekanism 专属参数。 */
+    public void setMekanismSettings(WorkstationType type, MekanismRecipeSettings settings) {
+        var state = state(type);
+        state.settings = state.settings.with(settings);
+    }
+
+    /** 使用 JEI 回填得到的完整集成设置替换指定工作站参数。 */
+    public void setSettings(WorkstationType type, RecipeSettings settings) {
+        state(type).settings = java.util.Objects.requireNonNull(settings, "settings");
     }
 
     /** 更新配方 ID、类型、来源模组和分组。 */
@@ -293,9 +314,10 @@ public final class RecipeEditorSession {
      */
     public RecipeDefinition createDefinition(boolean includeInputComponents, boolean includeOutputComponents) {
         var state = state(activeType);
-        var output = activeType == WorkstationType.AE2_ENTROPY
-                ? null
-                : createOutput(includeOutputComponents);
+        var outputStack = state.outputStack;
+        var output = RecipeIntegrationRegistry.outputRequired(activeType) || !outputStack.isEmpty()
+                ? createOutput(includeOutputComponents)
+                : null;
         var inputs = Arrays.stream(state.inputSpecs)
                 .map(spec -> includeInputComponents ? spec : withoutComponents(spec))
                 .toList();
@@ -307,14 +329,7 @@ public final class RecipeEditorSession {
                 output,
                 state.experience,
                 state.cookingTime,
-                new ExtendedRecipeSettings(
-                        state.extendedTier,
-                        state.powerCost,
-                        state.powerRate,
-                        state.ingredientCount,
-                        state.extendedCraftingTime
-                ),
-                state.ae2Settings
+                state.settings
         );
     }
 
@@ -348,7 +363,7 @@ public final class RecipeEditorSession {
             case GROUP -> sourceInfo.group();
             case INPUT -> {
                 if (activeType == WorkstationType.AE2_ENTROPY) {
-                    yield state(activeType).ae2Settings.entropyInputId();
+                    yield getAe2Settings(activeType).entropyInputId();
                 }
                 var specification = Arrays.stream(state(activeType).inputSpecs)
                         .filter(java.util.Objects::nonNull)
@@ -360,7 +375,7 @@ public final class RecipeEditorSession {
             }
             case OUTPUT -> {
                 if (activeType == WorkstationType.AE2_ENTROPY) {
-                    yield state(activeType).ae2Settings.entropyOutputId();
+                    yield getAe2Settings(activeType).entropyOutputId();
                 }
                 var output = createOutput(includeOutputComponents);
                 yield output.itemId() + output.componentPatch();
@@ -454,23 +469,13 @@ public final class RecipeEditorSession {
         private boolean shaped = true;
         private float experience;
         private int cookingTime;
-        private int extendedTier;
-        private int powerCost;
-        private int powerRate;
-        private int ingredientCount;
-        private int extendedCraftingTime;
-        private Ae2RecipeSettings ae2Settings;
+        private RecipeSettings settings;
 
         private EditorState(WorkstationType type) {
             inputStacks = new ItemStack[type.inputCount()];
             inputSpecs = new IngredientSpec[type.inputCount()];
             cookingTime = type.defaultCookingTime();
-            extendedTier = type.extendedTier();
-            powerCost = type.defaultPowerCost();
-            powerRate = type.defaultPowerRate();
-            ingredientCount = type.defaultIngredientCount();
-            extendedCraftingTime = type.defaultCraftingTime();
-            ae2Settings = Ae2RecipeSettings.defaults();
+            settings = RecipeIntegrationRegistry.defaultSettings(type);
             Arrays.fill(inputStacks, ItemStack.EMPTY);
         }
     }

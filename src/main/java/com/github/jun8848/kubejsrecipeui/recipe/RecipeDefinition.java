@@ -1,5 +1,8 @@
 package com.github.jun8848.kubejsrecipeui.recipe;
 
+import com.github.jun8848.kubejsrecipeui.recipe.integration.RecipeIntegrationRegistry;
+import com.github.jun8848.kubejsrecipeui.recipe.integration.RecipeValidationContext;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -18,8 +21,7 @@ public record RecipeDefinition(
         OutputSpec output,
         float experience,
         int cookingTime,
-        ExtendedRecipeSettings extendedSettings,
-        Ae2RecipeSettings ae2Settings
+        RecipeSettings settings
 ) {
     private static final Pattern RECIPE_ID_PATTERN = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
 
@@ -31,30 +33,12 @@ public record RecipeDefinition(
             throw new IllegalArgumentException("配方输入槽位数量与工作方块不匹配");
         }
         inputs = Collections.unmodifiableList(new ArrayList<>(inputs));
-        if (type != WorkstationType.AE2_ENTROPY) {
+        if (RecipeIntegrationRegistry.outputRequired(type)) {
             output = Objects.requireNonNull(output, "output");
         }
-        extendedSettings = Objects.requireNonNull(extendedSettings, "extendedSettings");
-        ae2Settings = Objects.requireNonNull(ae2Settings, "ae2Settings");
-        if (type != WorkstationType.AE2_ENTROPY && inputs.stream().allMatch(Objects::isNull)) {
+        settings = Objects.requireNonNull(settings, "settings");
+        if (RecipeIntegrationRegistry.inputRequired(type) && inputs.stream().allMatch(Objects::isNull)) {
             throw new IllegalArgumentException("至少需要一个配方原料");
-        }
-        if (type == WorkstationType.SMITHING && inputs.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("锻造配方需要模板、基础物品和追加材料");
-        }
-        if (type == WorkstationType.EXTENDED_COMBINATION) {
-            if (inputs.getFirst() == null) {
-                throw new IllegalArgumentException("组合合成需要中心输入物品");
-            }
-            if (inputs.subList(1, inputs.size()).stream().allMatch(Objects::isNull)) {
-                throw new IllegalArgumentException("组合合成至少需要一个基座材料");
-            }
-        }
-        if (type == WorkstationType.EXTENDED_COMPRESSOR && inputs.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("压缩机配方需要压缩材料和催化剂");
-        }
-        if (type == WorkstationType.AE2_INSCRIBER && inputs.get(1) == null) {
-            throw new IllegalArgumentException("压印器配方需要中间输入材料");
         }
         if (!Float.isFinite(experience) || experience < 0.0F) {
             throw new IllegalArgumentException("配方经验值不能小于 0");
@@ -62,9 +46,22 @@ public record RecipeDefinition(
         if (type.isCooking() && cookingTime < 1) {
             throw new IllegalArgumentException("烹饪时间必须至少为 1 tick");
         }
-        ae2Settings.validateFor(type);
-        id = normalizeRecipeId(id, type, shaped, inputs, output, experience, cookingTime,
-                extendedSettings, ae2Settings);
+        var context = new RecipeValidationContext(
+                type,
+                shaped,
+                inputs,
+                output,
+                experience,
+                cookingTime,
+                settings
+        );
+        RecipeIntegrationRegistry.validate(context);
+        id = normalizeRecipeId(id, context);
+    }
+
+    /** 获取当前配方所属集成保存的强类型设置。 */
+    public <T extends RecipeIntegrationSettings> T settings(Class<T> settingsType) {
+        return settings.require(settingsType);
     }
 
     /**
@@ -72,14 +69,7 @@ public record RecipeDefinition(
      */
     private static String normalizeRecipeId(
             String id,
-            WorkstationType type,
-            boolean shaped,
-            List<IngredientSpec> inputs,
-            OutputSpec output,
-            float experience,
-            int cookingTime,
-            ExtendedRecipeSettings extendedSettings,
-            Ae2RecipeSettings ae2Settings
+            RecipeValidationContext context
     ) {
         var normalized = id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
         if (!normalized.isEmpty()) {
@@ -92,11 +82,12 @@ public record RecipeDefinition(
             return normalized;
         }
 
-        var itemId = (output == null ? ae2Settings.entropyOutputId() : output.itemId()).toLowerCase(Locale.ROOT);
+        var itemId = RecipeIntegrationRegistry.generatedIdSource(context).toLowerCase(Locale.ROOT);
         var namespaceSeparator = itemId.indexOf(':');
         var outputPath = namespaceSeparator >= 0 ? itemId.substring(namespaceSeparator + 1) : itemId;
-        var signature = type.name() + '|' + shaped + '|' + inputs + '|' + output
-                + '|' + experience + '|' + cookingTime + '|' + extendedSettings + '|' + ae2Settings;
+        var signature = context.type().name() + '|' + context.shaped() + '|' + context.inputs()
+                + '|' + context.output() + '|' + context.experience() + '|' + context.cookingTime()
+                + '|' + RecipeIntegrationRegistry.generatedIdSignature(context);
         var hash = String.format(Locale.ROOT, "%08x", signature.hashCode());
         return "kubejs_recipe_ui:" + outputPath + "_" + hash;
     }

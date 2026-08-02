@@ -14,7 +14,7 @@ public record Ae2RecipeSettings(
         String entropyInputId,
         EntropyOutputType entropyOutputType,
         String entropyOutputId
-) {
+) implements RecipeIntegrationSettings {
     private static final Pattern RESOURCE_ID_PATTERN = Pattern.compile("[a-z0-9_.-]+:[a-z0-9/._-]+");
 
     public Ae2RecipeSettings {
