@@ -35,7 +35,7 @@
 - Extended Crafting `7.0.9` 或更高版本（可选，安装后自动启用扩展配方编辑）
 - Applied Energistics 2 `19.2.18` 或更高版本（可选，安装后自动启用 AE2 配方编辑）
 
-构建时 `libs/taffy-1.1.5.jar` 与 `libs/yoga-1.0.0.jar` 是必需的 `compileOnly` 依赖，它们直接取自 LDLib2 的 jarjar 内嵌库（这两个库没有公开的 Maven 坐标）。
+构建时还需要 `dev.vfyjxf:taffy:1.1.5` 与 `org.appliedenergistics.yoga:yoga:1.0.0` 两个 `compileOnly` 依赖：它们由 LDLib2 通过 jarJar 内嵌，且其类型出现在 LDLib2 的 API 签名里；两者都在 Maven Central 上。
 
 ## 使用方式
 

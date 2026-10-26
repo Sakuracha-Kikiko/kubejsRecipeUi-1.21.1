@@ -52,6 +52,8 @@ repositories {
     mavenCentral {
         content {
             includeGroup 'org.jspecify'
+            includeGroup 'dev.vfyjxf'
+            includeGroup 'org.appliedenergistics.yoga'
         }
     }
 }
@@ -93,8 +95,10 @@ configurations {
 dependencies {
     implementation "dev.latvian.mods:kubejs-neoforge:${kubejs_version}"
     implementation "maven.modrinth:ldlib:${ldlib2_version}"
-    // LDLib2 内嵌了 Taffy 与 Yoga，但其 Modrinth 元数据未将类型暴露给编译类路径。
-    compileOnly files('libs/taffy-1.1.5.jar', 'libs/yoga-1.0.0.jar')
+    // LDLib2 通过 jarJar 内嵌 Taffy 与 Yoga，它们的类型会出现在 LDLib2 的 API 签名里，
+    // 因此编译期需要这两个库；两者都有 Maven Central 坐标。
+    compileOnly "dev.vfyjxf:taffy:${taffy_version}"
+    compileOnly "org.appliedenergistics.yoga:yoga:${yoga_version}"
     compileOnly 'org.jspecify:jspecify:1.0.0'
 
     // JEI API 仅参与编译，完整模组只加入开发运行环境。
