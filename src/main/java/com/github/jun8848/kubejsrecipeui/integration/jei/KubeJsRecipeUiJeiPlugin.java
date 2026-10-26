@@ -15,10 +15,10 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandler;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
-import mezz.jei.api.recipe.types.IRecipeType;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
@@ -37,10 +37,10 @@ import java.util.Optional;
  */
 @JeiPlugin
 public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
-    private static final Identifier UID = Identifier.fromNamespaceAndPath(KubeJsRecipeUi.MOD_ID, "recipe_transfer");
+    private static final ResourceLocation UID = ResourceLocation.fromNamespaceAndPath(KubeJsRecipeUi.MOD_ID, "recipe_transfer");
 
     @Override
-    public Identifier getPluginUid() {
+    public ResourceLocation getPluginUid() {
         return UID;
     }
 
@@ -67,7 +67,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
 
     private static <R extends Recipe<?>> void register(
             IRecipeTransferRegistration registration,
-            IRecipeType<RecipeHolder<R>> recipeType,
+            RecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType
     ) {
         registration.addRecipeTransferHandler(
@@ -78,7 +78,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
 
     /** 将 JEI 当前展示的 RecipeHolder 转换为编辑器可消费的数据。 */
     private record EditorTransferHandler<R extends Recipe<?>>(
-            IRecipeType<RecipeHolder<R>> recipeType,
+            RecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType,
             IRecipeTransferHandlerHelper transferHelper
     ) implements IRecipeTransferHandler<ModularUIContainerMenu, RecipeHolder<R>> {
@@ -93,7 +93,7 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
         }
 
         @Override
-        public IRecipeType<RecipeHolder<R>> getRecipeType() {
+        public RecipeType<RecipeHolder<R>> getRecipeType() {
             return recipeType;
         }
 
@@ -131,20 +131,20 @@ public final class KubeJsRecipeUiJeiPlugin implements IModPlugin {
 
             // 保留来源信息，使“按 ID/类型/模组/分组删除”无需玩家重复输入。
             var recipe = holder.value();
-            var recipeId = holder.id().identifier();
+            var recipeId = holder.id();
             var recipeTypeId = BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer());
             var sourceInfo = new RecipeSourceInfo(
                     recipeId.toString(),
                     recipeTypeId == null ? "" : recipeTypeId.toString(),
                     recipeId.getNamespace(),
-                    recipe.group()
+                    recipe.getGroup()
             );
             var shaped = recipe instanceof ShapedRecipe;
             var width = shaped ? ((ShapedRecipe) recipe).getWidth() : 0;
             var height = shaped ? ((ShapedRecipe) recipe).getHeight() : 0;
             // 烹饪配方还需要同步 JEI 配方对象中的经验和时间，而不是沿用界面默认值。
-            var experience = recipe instanceof AbstractCookingRecipe cooking ? cooking.experience() : 0.0F;
-            var cookingTime = recipe instanceof AbstractCookingRecipe cooking ? cooking.cookingTime() : 200;
+            var experience = recipe instanceof AbstractCookingRecipe cooking ? cooking.getExperience() : 0.0F;
+            var cookingTime = recipe instanceof AbstractCookingRecipe cooking ? cooking.getCookingTime() : 200;
             bridge.fill(new RecipeTransferData(
                     workstationType,
                     List.copyOf(inputs),

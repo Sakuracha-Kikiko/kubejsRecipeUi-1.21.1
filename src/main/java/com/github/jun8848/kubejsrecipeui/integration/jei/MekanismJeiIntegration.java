@@ -16,10 +16,10 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandler;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
-import mezz.jei.api.recipe.types.IRecipeHolderType;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
@@ -80,8 +80,8 @@ final class MekanismJeiIntegration {
             String categoryPath,
             WorkstationType type
     ) {
-        IRecipeHolderType<Recipe<?>> recipeType = IRecipeHolderType.create(
-                Identifier.fromNamespaceAndPath("mekanism", categoryPath)
+        RecipeType<RecipeHolder<Recipe<?>>> recipeType = RecipeType.createRecipeHolderType(
+                ResourceLocation.fromNamespaceAndPath("mekanism", categoryPath)
         );
         registration.addRecipeTransferHandler(
                 new MekanismTransferHandler(
@@ -266,7 +266,7 @@ final class MekanismJeiIntegration {
     }
 
     private record MekanismTransferHandler(
-            IRecipeHolderType<Recipe<?>> recipeType,
+            RecipeType<RecipeHolder<Recipe<?>>> recipeType,
             WorkstationType workstationType,
             String categoryPath,
             IRecipeTransferHandlerHelper transferHelper
@@ -282,7 +282,7 @@ final class MekanismJeiIntegration {
         }
 
         @Override
-        public IRecipeHolderType<Recipe<?>> getRecipeType() {
+        public RecipeType<RecipeHolder<Recipe<?>>> getRecipeType() {
             return recipeType;
         }
 
@@ -307,13 +307,13 @@ final class MekanismJeiIntegration {
             var inputs = collectSlots(recipeSlots, RecipeIngredientRole.INPUT);
             var outputs = collectSlots(recipeSlots, RecipeIngredientRole.OUTPUT);
             var recipe = holder.value();
-            var recipeId = holder.id().identifier();
+            var recipeId = holder.id();
             var serializerId = BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer());
             var sourceInfo = new RecipeSourceInfo(
                     recipeId.toString(),
                     serializerId == null ? "" : serializerId.toString(),
                     recipeId.getNamespace(),
-                    recipe.group()
+                    recipe.getGroup()
             );
             var output = workstationType == WorkstationType.MEKANISM_SAWING
                     ? reflectedItemStack(recipe, "getMainOutputRaw")

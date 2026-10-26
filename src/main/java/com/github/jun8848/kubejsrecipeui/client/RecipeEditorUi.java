@@ -50,7 +50,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -81,8 +81,8 @@ public final class RecipeEditorUi {
     private static final int SCREEN_MARGIN = 6;
     private static final float RECIPE_PANEL_PERCENT = 64.0F;
     private static final float PREVIEW_PANEL_PERCENT = 48.0F;
-    private static final Identifier AE2_JEI_TEXTURE = Identifier.fromNamespaceAndPath("ae2", "textures/guis/jei.png");
-    private static final Identifier JEI_RECIPE_ARROW_TEXTURE = Identifier.fromNamespaceAndPath(
+    private static final ResourceLocation AE2_JEI_TEXTURE = ResourceLocation.fromNamespaceAndPath("ae2", "textures/guis/jei.png");
+    private static final ResourceLocation JEI_RECIPE_ARROW_TEXTURE = ResourceLocation.fromNamespaceAndPath(
             "jei",
             "textures/jei/atlas/gui/recipe_arrow.png"
     );
@@ -1404,31 +1404,31 @@ public final class RecipeEditorUi {
 
     /** @return 物品注册 ID 对应的物品堆，缺失或无物品形态时返回空堆 */
     private static ItemStack optionalItemStack(String id) {
-        var identifier = Identifier.tryParse(id);
+        var identifier = ResourceLocation.tryParse(id);
         if (identifier == null) {
             return ItemStack.EMPTY;
         }
-        var item = BuiltInRegistries.ITEM.getValue(identifier);
+        var item = BuiltInRegistries.ITEM.get(identifier);
         return item == null || item == Items.AIR ? ItemStack.EMPTY : item.getDefaultInstance();
     }
 
     /** @return 方块注册 ID 对应的展示物品 */
     private static ItemStack blockPreviewStack(String id) {
-        var identifier = Identifier.tryParse(id);
+        var identifier = ResourceLocation.tryParse(id);
         if (identifier == null) {
             return ItemStack.EMPTY;
         }
-        var block = BuiltInRegistries.BLOCK.getValue(identifier);
+        var block = BuiltInRegistries.BLOCK.get(identifier);
         return block == null || block.asItem() == Items.AIR ? ItemStack.EMPTY : block.asItem().getDefaultInstance();
     }
 
     /** @return 流体注册 ID 对应的桶物品 */
     private static ItemStack fluidPreviewStack(String id) {
-        var identifier = Identifier.tryParse(id);
+        var identifier = ResourceLocation.tryParse(id);
         if (identifier == null) {
             return ItemStack.EMPTY;
         }
-        var fluid = BuiltInRegistries.FLUID.getValue(identifier);
+        var fluid = BuiltInRegistries.FLUID.get(identifier);
         return fluid == null || fluid.getBucket() == Items.AIR
                 ? ItemStack.EMPTY
                 : fluid.getBucket().getDefaultInstance();
@@ -1902,10 +1902,10 @@ public final class RecipeEditorUi {
     ) {
         var candidates = new ArrayList<>(BuiltInRegistries.FLUID.keySet().stream()
                 .filter(identifier -> {
-                    var fluid = BuiltInRegistries.FLUID.getValue(identifier);
+                    var fluid = BuiltInRegistries.FLUID.get(identifier);
                     return fluid != null && fluid != Fluids.EMPTY && fluid.defaultFluidState().isSource();
                 })
-                .map(Identifier::toString)
+                .map(ResourceLocation::toString)
                 .sorted(Comparator.comparing(RecipeEditorUi::fluidDisplayName).thenComparing(value -> value))
                 .toList());
         if (!selectedId.isBlank() && !candidates.contains(selectedId)) {
@@ -1981,7 +1981,7 @@ public final class RecipeEditorUi {
             var getTranslationKey = chemicalClass.getMethod("getTranslationKey");
             var entries = new ArrayList<Map.Entry<String, String>>();
             for (var entry : registry.entrySet()) {
-                var id = entry.getKey().identifier().toString();
+                var id = entry.getKey().location().toString();
                 if (id.equals("mekanism:empty")) {
                     continue;
                 }
@@ -2007,11 +2007,11 @@ public final class RecipeEditorUi {
         if (id == null || id.isBlank()) {
             return "-";
         }
-        var identifier = Identifier.tryParse(id);
+        var identifier = ResourceLocation.tryParse(id);
         if (identifier == null) {
             return id;
         }
-        var fluid = BuiltInRegistries.FLUID.getValue(identifier);
+        var fluid = BuiltInRegistries.FLUID.get(identifier);
         if (fluid == null || fluid == Fluids.EMPTY) {
             return id;
         }

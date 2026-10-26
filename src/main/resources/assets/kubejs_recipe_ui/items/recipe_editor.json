@@ -1,6 +1,0 @@
-{
-  "model": {
-    "type": "minecraft:model",
-    "model": "kubejs_recipe_ui:block/recipe_editor"
-  }
-}

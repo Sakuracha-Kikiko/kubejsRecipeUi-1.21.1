@@ -295,7 +295,7 @@ public final class RecipeEditorSession {
             return List.of();
         }
 
-        var tags = stack.typeHolder()
+        var tags = stack.getItemHolder()
                 .tags()
                 .map(tag -> "#" + tag.location())
                 .sorted()

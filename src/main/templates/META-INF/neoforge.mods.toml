@@ -27,7 +27,7 @@ side="BOTH"
 modId="kubejs"
 type="required"
 reason="kubejsRecipeUi extends KubeJS recipe functionality."
-versionRange="[8.0.3,)"
+versionRange="[${kubejs_version_range},)"
 ordering="AFTER"
 side="BOTH"
 

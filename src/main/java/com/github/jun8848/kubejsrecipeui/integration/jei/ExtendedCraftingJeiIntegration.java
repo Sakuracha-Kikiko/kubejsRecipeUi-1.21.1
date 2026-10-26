@@ -28,7 +28,7 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandler;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
-import mezz.jei.api.recipe.types.IRecipeType;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Player;
@@ -79,7 +79,7 @@ final class ExtendedCraftingJeiIntegration {
 
     private static <R extends Recipe<?>> void register(
             IRecipeTransferRegistration registration,
-            IRecipeType<RecipeHolder<R>> recipeType,
+            RecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType,
             SettingsFactory<R> settingsFactory
     ) {
@@ -109,7 +109,7 @@ final class ExtendedCraftingJeiIntegration {
                 0,
                 recipe.getPowerCost(),
                 recipe.getPowerRate(),
-                recipe.getIngredient().count(),
+                recipe.getCount(0),
                 1
         );
     }
@@ -123,7 +123,7 @@ final class ExtendedCraftingJeiIntegration {
     }
 
     private record ExtendedTransferHandler<R extends Recipe<?>>(
-            IRecipeType<RecipeHolder<R>> recipeType,
+            RecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType,
             SettingsFactory<R> settingsFactory,
             IRecipeTransferHandlerHelper transferHelper
@@ -139,7 +139,7 @@ final class ExtendedCraftingJeiIntegration {
         }
 
         @Override
-        public IRecipeType<RecipeHolder<R>> getRecipeType() {
+        public RecipeType<RecipeHolder<R>> getRecipeType() {
             return recipeType;
         }
 
@@ -175,13 +175,13 @@ final class ExtendedCraftingJeiIntegration {
                     .orElse(ItemStack.EMPTY);
 
             var recipe = holder.value();
-            var recipeId = holder.id().identifier();
+            var recipeId = holder.id();
             var serializerId = BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer());
             var sourceInfo = new RecipeSourceInfo(
                     recipeId.toString(),
                     serializerId == null ? "" : serializerId.toString(),
                     recipeId.getNamespace(),
-                    recipe.group()
+                    recipe.getGroup()
             );
             var shape = shape(recipe);
             bridge.fill(new RecipeTransferData(

@@ -1,6 +1,6 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.141'
+    id 'net.neoforged.moddev' version '2.0.91'
     id 'idea'
 }
 
@@ -36,7 +36,7 @@ repositories {
     }
     maven {
         name = 'BlakesMods'
-        url = 'https://maven.blakesmods.com'
+        url = 'https://maven.blakesmods.com/releases'
         content {
             includeGroup 'com.blakebr0.extendedcrafting'
             includeGroup 'com.blakebr0.cucumber'
@@ -49,13 +49,18 @@ repositories {
             includeGroup 'maven.modrinth'
         }
     }
+    mavenCentral {
+        content {
+            includeGroup 'org.jspecify'
+        }
+    }
 }
 
 base {
     archivesName = mod_id
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 neoForge {
     version = project.neo_version
@@ -87,9 +92,10 @@ configurations {
 
 dependencies {
     implementation "dev.latvian.mods:kubejs-neoforge:${kubejs_version}"
-    implementation "maven.modrinth:ldlib:mc26.1.x-${ldlib2_version}-neoforge"
-    // LDLib 内嵌了 Taffy，但其 Modrinth 元数据未将类型暴露给编译类路径。
-    compileOnly "dev.vfyjxf:taffy:1.1.4"
+    implementation "maven.modrinth:ldlib:${ldlib2_version}"
+    // LDLib2 内嵌了 Taffy 与 Yoga，但其 Modrinth 元数据未将类型暴露给编译类路径。
+    compileOnly files('libs/taffy-1.1.5.jar', 'libs/yoga-1.0.0.jar')
+    compileOnly 'org.jspecify:jspecify:1.0.0'
 
     // JEI API 仅参与编译，完整模组只加入开发运行环境。
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
@@ -108,7 +114,7 @@ dependencies {
     localRuntime "maven.modrinth:guideme:${guideme_version}"
     localRuntime "maven.modrinth:ae2:${ae2_version}"
 
-    // Mekanism 26.1 暂无公开构建；存在本地源码构建包时才加入开发运行环境。
+    // Mekanism 1.21.1 暂无公开开发包；存在本地源码构建包时才加入开发运行环境。
     localRuntime fileTree(dir: "libs", include: ["Mekanism-*.jar"])
 }
 
@@ -116,6 +122,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
     var replaceProperties = [
             minecraft_version_range: minecraft_version_range,
             neo_version_range      : neo_version_range,
+            kubejs_version_range   : kubejs_version_range,
             jei_version_range      : jei_version_range,
             ldlib2_version_range   : ldlib2_version_range,
             extended_crafting_version_range: extended_crafting_version_range,

@@ -28,7 +28,7 @@ public final class ModContent {
     public static final DeferredBlock<Block> RECIPE_EDITOR = BLOCKS.registerBlock(
             "recipe_editor",
             RecipeEditorBlock::new,
-            () -> BlockBehaviour.Properties.ofFullCopy(Blocks.CRAFTING_TABLE)
+            BlockBehaviour.Properties.ofFullCopy(Blocks.CRAFTING_TABLE)
     );
 
     /** 工作台编辑器对应的方块物品。 */

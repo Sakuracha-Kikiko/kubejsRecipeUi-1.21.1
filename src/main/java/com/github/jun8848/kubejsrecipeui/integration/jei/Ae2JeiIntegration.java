@@ -19,7 +19,7 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandler;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
-import mezz.jei.api.recipe.types.IRecipeType;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Player;
@@ -42,28 +42,28 @@ final class Ae2JeiIntegration {
     static void register(IRecipeTransferRegistration registration) {
         register(
                 registration,
-                IRecipeType.create(AERecipeTypes.CHARGER),
+                RecipeType.createFromVanilla(AERecipeTypes.CHARGER),
                 WorkstationType.AE2_CHARGER,
-                recipe -> recipe.result().create(),
+                recipe -> recipe.getResultItem(),
                 recipe -> Ae2RecipeSettings.defaults()
         );
         register(
                 registration,
-                IRecipeType.create(AERecipeTypes.INSCRIBER),
+                RecipeType.createFromVanilla(AERecipeTypes.INSCRIBER),
                 WorkstationType.AE2_INSCRIBER,
-                recipe -> recipe.result().create(),
+                recipe -> recipe.getResultItem(),
                 Ae2JeiIntegration::inscriberSettings
         );
         register(
                 registration,
-                IRecipeType.create(AERecipeTypes.TRANSFORM),
+                RecipeType.createFromVanilla(AERecipeTypes.TRANSFORM),
                 WorkstationType.AE2_TRANSFORM,
-                TransformRecipe::createResult,
+                TransformRecipe::getResultItem,
                 Ae2JeiIntegration::transformSettings
         );
         register(
                 registration,
-                IRecipeType.create(AERecipeTypes.ENTROPY),
+                RecipeType.createFromVanilla(AERecipeTypes.ENTROPY),
                 WorkstationType.AE2_ENTROPY,
                 Ae2JeiIntegration::entropyDisplayOutput,
                 Ae2JeiIntegration::entropySettings
@@ -72,7 +72,7 @@ final class Ae2JeiIntegration {
 
     private static <R extends Recipe<?>> void register(
             IRecipeTransferRegistration registration,
-            IRecipeType<RecipeHolder<R>> recipeType,
+            RecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType,
             Function<R, ItemStack> outputFactory,
             Function<R, Ae2RecipeSettings> settingsFactory
@@ -92,7 +92,7 @@ final class Ae2JeiIntegration {
     }
 
     private static Ae2RecipeSettings transformSettings(TransformRecipe recipe) {
-        var circumstance = recipe.circumstance().toJson();
+        var circumstance = recipe.getCircumstance().toJson();
         var type = circumstance.has("type") ? circumstance.get("type").getAsString() : "fluid";
         var settings = Ae2RecipeSettings.defaults().withTransformCondition(
                 "explosion".equals(type)
@@ -133,7 +133,7 @@ final class Ae2JeiIntegration {
                     .withEntropyOutputType(Ae2RecipeSettings.EntropyOutputType.FLUID)
                     .withEntropyOutputId(registryId(BuiltInRegistries.FLUID.getKey(output.fluid().get().fluid())));
         } else if (!output.drops().isEmpty()) {
-            var drop = output.drops().getFirst().create();
+            var drop = output.drops().getFirst();
             settings = settings
                     .withEntropyOutputType(Ae2RecipeSettings.EntropyOutputType.DROPS)
                     .withEntropyOutputId(registryId(BuiltInRegistries.ITEM.getKey(drop.getItem())));
@@ -144,7 +144,7 @@ final class Ae2JeiIntegration {
     private static ItemStack entropyDisplayOutput(EntropyRecipe recipe) {
         var output = recipe.getOutput();
         if (!output.drops().isEmpty()) {
-            return output.drops().getFirst().create();
+            return output.drops().getFirst();
         }
         if (output.block().isPresent()) {
             return output.block().get().block().asItem().getDefaultInstance();
@@ -152,12 +152,12 @@ final class Ae2JeiIntegration {
         return ItemStack.EMPTY;
     }
 
-    private static String registryId(net.minecraft.resources.Identifier id) {
+    private static String registryId(net.minecraft.resources.ResourceLocation id) {
         return id == null ? "" : id.toString();
     }
 
     private record Ae2TransferHandler<R extends Recipe<?>>(
-            IRecipeType<RecipeHolder<R>> recipeType,
+            RecipeType<RecipeHolder<R>> recipeType,
             WorkstationType workstationType,
             Function<R, ItemStack> outputFactory,
             Function<R, Ae2RecipeSettings> settingsFactory,
@@ -174,7 +174,7 @@ final class Ae2JeiIntegration {
         }
 
         @Override
-        public IRecipeType<RecipeHolder<R>> getRecipeType() {
+        public RecipeType<RecipeHolder<R>> getRecipeType() {
             return recipeType;
         }
 
@@ -205,13 +205,13 @@ final class Ae2JeiIntegration {
             }
 
             var recipe = holder.value();
-            var recipeId = holder.id().identifier();
+            var recipeId = holder.id();
             var serializerId = BuiltInRegistries.RECIPE_SERIALIZER.getKey(recipe.getSerializer());
             var sourceInfo = new RecipeSourceInfo(
                     recipeId.toString(),
                     serializerId == null ? "" : serializerId.toString(),
                     recipeId.getNamespace(),
-                    recipe.group()
+                    recipe.getGroup()
             );
             bridge.fill(new RecipeTransferData(
                     workstationType,

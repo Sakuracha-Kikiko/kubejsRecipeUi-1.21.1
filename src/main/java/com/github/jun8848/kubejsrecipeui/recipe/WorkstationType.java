@@ -6,7 +6,7 @@ import com.github.jun8848.kubejsrecipeui.recipe.integration.MekanismRecipeIntegr
 import com.github.jun8848.kubejsrecipeui.recipe.integration.RecipeIntegrationRegistry;
 import com.github.jun8848.kubejsrecipeui.recipe.integration.VanillaRecipeIntegration;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
@@ -64,7 +64,7 @@ public enum WorkstationType {
     MEKANISM_SAWING("kubejs_recipe_ui.workstation.mekanism_sawing", "mekanism:precision_sawmill", 1, 1, 1);
 
     private final String translationKey;
-    private final Identifier iconId;
+    private final ResourceLocation iconId;
     private final int inputCount;
     private final int gridWidth;
     private final int gridHeight;
@@ -84,7 +84,7 @@ public enum WorkstationType {
 
     /** @return 侧边栏按钮使用的物品图标；注册项缺失时使用屏障占位 */
     public Item icon() {
-        var item = BuiltInRegistries.ITEM.getValue(iconId);
+        var item = BuiltInRegistries.ITEM.get(iconId);
         return item == null || item == Items.AIR ? Items.BARRIER : item;
     }
 
@@ -160,8 +160,8 @@ public enum WorkstationType {
         return RecipeIntegrationRegistry.defaultCookingTime(this);
     }
 
-    private static Identifier identifier(String value) {
+    private static ResourceLocation identifier(String value) {
         var separator = value.indexOf(':');
-        return Identifier.fromNamespaceAndPath(value.substring(0, separator), value.substring(separator + 1));
+        return ResourceLocation.fromNamespaceAndPath(value.substring(0, separator), value.substring(separator + 1));
     }
 }

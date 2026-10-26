@@ -27,7 +27,7 @@ public final class RecipeWriteService {
      */
     public static String write(ServerPlayer player, String code) {
         var server = player.level().getServer();
-        if (server == null || (!server.isSingleplayer() && !server.getPlayerList().isOp(player.nameAndId()))) {
+        if (server == null || (!server.isSingleplayer() && !server.getPlayerList().isOp(player.getGameProfile()))) {
             return DENIED;
         }
 

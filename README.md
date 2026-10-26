@@ -1,6 +1,8 @@
 # kubejsRecipeUi
 
-`kubejsRecipeUi` 是一个基于 Minecraft 26.1.2、NeoForge 和 KubeJS 的可视化配方编辑附属模组，作者为 mubai。
+`kubejsRecipeUi` 是一个基于 Minecraft 1.21.1、NeoForge 和 KubeJS 的可视化配方编辑附属模组，作者为 mubai。
+
+> 本仓库的 `port/1.21.1` 分支是上游 26.1.2 版本的 1.21.1 移植：`Identifier` 改回 `ResourceLocation`、`BuiltInRegistries#getValue` 改回 `#get`、JEI `IRecipeType` 改回 `RecipeType`、物品模型与战利品表改回 1.21.1 的目录结构，并把 LDLib2 内嵌的 `taffy`/`yoga` 放进 `libs/` 供编译使用。
 
 它将常用的 KubeJS 配方修改流程放进游戏内界面中：玩家可以像使用原版工作台、熔炉、烟熏炉、高炉、营火、切石机和锻造台一样编辑配方，设置材料、标签、替代材料、NBT/数据组件以及输出数量，并生成可直接用于 KubeJS 的脚本代码。
 
@@ -23,13 +25,15 @@
 
 ## 依赖
 
-- Minecraft `26.1.2`
-- NeoForge `26.1.2` 系列
-- KubeJS `8.0.3` 或更高版本
-- LDLib2 `26.1.2` 系列（必需）
-- JEI `29.x`（可选，用于配方查看和自动填充）
-- Extended Crafting `8.0.0` 或更高版本（可选，安装后自动启用扩展配方编辑）
-- Applied Energistics 2 `26.1` 或更高版本（可选，安装后自动启用 AE2 配方编辑）
+- Minecraft `1.21.1`
+- NeoForge `21.1.250` 或更高版本
+- KubeJS `2101.7` 或更高版本（2101 系列）
+- LDLib2 `2.2.44`（`mc1.21.1-2.2.44-neoforge`，必需）
+- JEI `19.51.0.417` 或更高版本（可选，用于配方查看和自动填充）
+- Extended Crafting `7.0.9` 或更高版本（可选，安装后自动启用扩展配方编辑）
+- Applied Energistics 2 `19.2.18` 或更高版本（可选，安装后自动启用 AE2 配方编辑）
+
+构建时 `libs/taffy-1.1.5.jar` 与 `libs/yoga-1.0.0.jar` 是必需的 `compileOnly` 依赖，它们直接取自 LDLib2 的 jarjar 内嵌库（这两个库没有公开的 Maven 坐标）。
 
 ## 使用方式
 
