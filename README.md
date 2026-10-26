@@ -1,6 +1,8 @@
+*Written by DeepSeek*
+
 # kubejsRecipeUi
 
-`kubejsRecipeUi` 是一个基于 Minecraft 1.21.1、NeoForge 和 KubeJS 的可视化配方编辑附属模组，作者为 mubai。
+`kubejsRecipeUi` 是一个基于 Minecraft 26.1.2、NeoForge 和 KubeJS 的可视化配方编辑附属模组，作者为 mubai。
 
 > 本仓库的 `port/1.21.1` 分支是上游 26.1.2 版本的 1.21.1 移植：`Identifier` 改回 `ResourceLocation`、`BuiltInRegistries#getValue` 改回 `#get`、JEI `IRecipeType` 改回 `RecipeType`、物品模型与战利品表改回 1.21.1 的目录结构，并把 LDLib2 内嵌的 `taffy`/`yoga` 放进 `libs/` 供编译使用。
 
