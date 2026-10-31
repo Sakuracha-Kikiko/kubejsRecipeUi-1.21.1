@@ -2345,7 +2345,7 @@ public final class RecipeEditorUi {
         return slot;
     }
 
-    /** 创建带可见数量输入框的输出幻影槽，并与玩家光标和 JEI 回填同步。 */
+        /** 创建带可见数量输入框的输出幻影槽，并与玩家光标和 JEI 回填同步。 */
     private static ItemSlot createOutputSlot(
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session,
@@ -2357,6 +2357,11 @@ public final class RecipeEditorUi {
         output.layout(style -> style.width(SLOT_SIZE).height(SLOT_SIZE));
         output.setOverflowVisible(true);
         output.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.slot.output")));
+
+        // 数量输入框是槽位的子元素：程序化回写文本时要屏蔽监听，否则会反过来覆盖玩家输入。
+        var syncingField = new boolean[]{false};
+        // 玩家在数量框里输入过的数量；-1 表示没有手动输入，此时沿用光标物品自身的数量。
+        var typedCount = new int[]{-1};
 
         var countField = numericField(
                 Integer.toString(Math.max(1, session.getOutputStack(type).getCount())),
@@ -2375,16 +2380,34 @@ public final class RecipeEditorUi {
         countField.style(style -> style
                 .zIndex(20)
                 .tooltips(Component.translatable("kubejs_recipe_ui.output.count")));
+
+        java.util.function.IntConsumer writeCount = count -> {
+            syncingField[0] = true;
+            countField.setText(Integer.toString(count));
+            syncingField[0] = false;
+        };
+
         countField.registerValueListener(value -> {
-            if (!session.getOutputStack(type).isEmpty()) {
-                session.setOutputCount(type, parseInt(value, 1));
+            if (syncingField[0]) {
+                return;
+            }
+            var count = Math.min(99, Math.max(1, parseInt(value, 1)));
+            typedCount[0] = count;
+            if (session.getOutputStack(type).isEmpty()) {
+                return;
+            }
+            session.setOutputCount(type, count);
+            // 会话里保存的是物品堆副本，原地改数量不会通知槽位，这里同步显示用的那一份。
+            var displayed = output.getValue();
+            if (!displayed.isEmpty()) {
+                displayed.setCount(count);
             }
         });
 
         output.registerValueListener(stack -> {
             session.setOutputStack(type, stack);
             if (stack != null && !stack.isEmpty()) {
-                countField.setText(Integer.toString(stack.getCount()));
+                writeCount.accept(stack.getCount());
             }
         });
         output.bind(DataBindingBuilder.itemStack(
@@ -2392,21 +2415,28 @@ public final class RecipeEditorUi {
                 stack -> {
                     session.setOutputStack(type, stack);
                     if (stack != null && !stack.isEmpty()) {
-                        countField.setText(Integer.toString(stack.getCount()));
+                        writeCount.accept(stack.getCount());
                     }
                 }
         ).build());
         output.addChild(countField);
         output.addEventListener("mouseDown", event -> {
+            // 数量输入框上的点击会冒泡到槽位；不区分来源就会把刚放好的输出清空或覆盖。
+            if (event.target != output) {
+                return;
+            }
             var carried = holder.player.containerMenu.getCarried();
             if (event.button == 0 && !carried.isEmpty()) {
                 event.stopImmediatePropagation();
-                output.setItem(carried.copy());
-                LOGGER.info("[工作台编辑器] {} 从玩家光标复制输出物品: {} x{}", type, carried.getItem(), carried.getCount());
+                var count = Math.min(99, Math.max(1, typedCount[0] > 0 ? typedCount[0] : carried.getCount()));
+                fillOutputSlot(output, session, type, carried, count);
+                writeCount.accept(count);
+                LOGGER.info("[工作台编辑器] {} 从玩家光标复制输出物品: {} x{}", type, carried.getItem(), count);
                 return;
             }
             if (event.button == 0) {
                 event.stopImmediatePropagation();
+                typedCount[0] = -1;
                 output.setItem(ItemStack.EMPTY);
                 LOGGER.info("[工作台编辑器] {} 左键清空输出槽位", type);
             }
@@ -2414,7 +2444,25 @@ public final class RecipeEditorUi {
         return output;
     }
 
-    /** 创建精密锯木机副产物幻影槽，并同步副产物 ID、数量和 JEI 回填。 */
+    /**
+     * 把光标物品按指定数量写入输出槽。
+     *
+     * <p>{@code ItemSlot#setValue} 在物品相同、只有数量不同时会提前返回，
+     * 所以这里同时回写会话与槽位显示，保证数量框里的数字总能真正落到输出上。</p>
+     */
+    private static void fillOutputSlot(ItemSlot output, RecipeEditorSession session, WorkstationType type,
+                                       ItemStack carried, int count) {
+        var clamped = Math.min(99, Math.max(1, count));
+        var stack = carried.copyWithCount(clamped);
+        output.setItem(stack);
+        session.setOutputStack(type, stack);
+        var displayed = output.getValue();
+        if (!displayed.isEmpty() && displayed.getCount() != clamped) {
+            displayed.setCount(clamped);
+        }
+    }
+
+        /** 创建精密锯木机副产物幻影槽，并同步副产物 ID、数量和 JEI 回填。 */
     private static ItemSlot createMekanismSecondaryOutputSlot(
             BlockUIMenuType.BlockUIHolder holder,
             RecipeEditorSession session,
@@ -2428,6 +2476,9 @@ public final class RecipeEditorUi {
         output.style(style -> style.tooltips(Component.translatable("kubejs_recipe_ui.mekanism.secondary_output")));
 
         var settings = session.getMekanismSettings(type);
+        // 与主输出槽一致：屏蔽程序化回写产生的监听，并记住玩家手动输入过的数量。
+        var syncingField = new boolean[]{false};
+        var typedCount = new int[]{-1};
         var countField = numericField(
                 Integer.toString(settings.secondaryItemOutputCount()),
                 1,
@@ -2445,13 +2496,29 @@ public final class RecipeEditorUi {
         countField.style(style -> style
                 .zIndex(20)
                 .tooltips(Component.translatable("kubejs_recipe_ui.mekanism.secondary_count")));
+
+        java.util.function.IntConsumer writeCount = count -> {
+            syncingField[0] = true;
+            countField.setText(Integer.toString(count));
+            syncingField[0] = false;
+        };
+
         countField.registerValueListener(value -> {
+            if (syncingField[0]) {
+                return;
+            }
+            var count = Math.min(99, Math.max(1, parseInt(value, 1)));
+            typedCount[0] = count;
             var current = session.getMekanismSettings(type);
             session.setMekanismSettings(type, current.withSecondaryItemOutput(
                     current.secondaryItemOutputId(),
-                    parseInt(value, 1),
+                    count,
                     current.secondaryChance()
             ));
+            var displayed = output.getValue();
+            if (!displayed.isEmpty()) {
+                displayed.setCount(count);
+            }
         });
 
         java.util.function.Consumer<ItemStack> updateSecondaryOutput = stack -> {
@@ -2471,7 +2538,7 @@ public final class RecipeEditorUi {
                     count,
                     current.secondaryChance()
             ));
-            countField.setText(Integer.toString(count));
+            writeCount.accept(count);
         };
 
         output.registerValueListener(updateSecondaryOutput);
@@ -2481,15 +2548,29 @@ public final class RecipeEditorUi {
         ).build());
         output.addChild(countField);
         output.addEventListener("mouseDown", event -> {
+            // 数量输入框上的点击会冒泡到槽位，必须只处理槽位自身的点击。
+            if (event.target != output) {
+                return;
+            }
             var carried = holder.player.containerMenu.getCarried();
             if (event.button == 0 && !carried.isEmpty()) {
                 event.stopImmediatePropagation();
-                output.setItem(carried.copy());
-                LOGGER.info("[工作台编辑器] {} 从玩家光标复制副产物: {} x{}", type, carried.getItem(), carried.getCount());
+                var count = Math.min(99, Math.max(1, typedCount[0] > 0 ? typedCount[0] : carried.getCount()));
+                var stack = carried.copyWithCount(count);
+                output.setItem(stack);
+                // setItem 在物品相同、数量不同时会提前返回，这里直接回写会话与显示。
+                updateSecondaryOutput.accept(stack);
+                var displayed = output.getValue();
+                if (!displayed.isEmpty() && displayed.getCount() != count) {
+                    displayed.setCount(count);
+                }
+                writeCount.accept(count);
+                LOGGER.info("[工作台编辑器] {} 从玩家光标复制副产物: {} x{}", type, carried.getItem(), count);
                 return;
             }
             if (event.button == 0) {
                 event.stopImmediatePropagation();
+                typedCount[0] = -1;
                 output.setItem(ItemStack.EMPTY);
                 LOGGER.info("[工作台编辑器] {} 左键清空副产物槽位", type);
             }
